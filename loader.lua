@@ -1368,12 +1368,15 @@ local function checkKey()
     local fileName = createFolderAndFile()
     local githubKey = getGithubKey()
 
-    if not fileExists(iconFilePath) then
-        fetchAndSaveIcon()
-    end
-    if not fileExists(youtubeFilePath) then
-        fetchAndSaveYouTubeIcon()
-    end
+    -- Attempt to fetch assets, but don't halt execution on failure
+    pcall(function()
+        if not fileExists(iconFilePath) then
+            fetchAndSaveIcon()
+        end
+        if not fileExists(youtubeFilePath) then
+            fetchAndSaveYouTubeIcon()
+        end
+    end)
 
     KeyFrame.Visible = false
     HubFrame.Visible = false
