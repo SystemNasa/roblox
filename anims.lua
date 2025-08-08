@@ -102,7 +102,7 @@ return {
     ["Heel Click Breakdown"] = 18441999758,
     ["teach me how to dougie"] = 7619764422,
     ["out west"] = 18553123644,
-    ["Ishowspeed shake dat ass"] = 16455715993,
+    ["Ishowspeed shake dat ass"] = 92618727772186,
     ["russian kick (kalinka)"] = 8749319208,
     ["Criss Cross"] = 5806077631,
     ["smeeze"] = 18553199244,
@@ -888,3 +888,4 @@ return {
     ["Run meme"] = 12474655235,
     ["Pole dance"] = 16331781302
 }
+
