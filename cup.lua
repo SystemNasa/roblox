@@ -42,7 +42,7 @@ end
 
 local GUI_ID = randstr()
 
-local scriptUrl = "https://raw.githubusercontent.com/YourRepo/YourScript.lua" -- Replace with your script's raw GitHub URL
+local scriptUrl = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/cup.lua" -- Replace with your script's raw GitHub URL
 
 local queueTeleport = (syn and syn.queue_on_teleport) or
                      (fluxus and fluxus.queue_on_teleport) or
