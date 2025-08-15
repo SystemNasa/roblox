@@ -3,7 +3,7 @@
 --!native
 
 -- Edit TELEPORT_DELAY to change the time (in seconds) between teleports to each player
-local TELEPORT_DELAY = 0.5
+local TELEPORT_DELAY = 0.2
 
 -- Edit TTS_MESSAGE to change the text spoken by the TTS system
 local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew "
