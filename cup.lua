@@ -9,7 +9,7 @@ local TELEPORT_DELAY = 0.5
 local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew "
 
 -- Edit TOOL_CYCLE_DELAY to change the time (in seconds) between equipping/unequipping tools
-local TOOL_CYCLE_DELAY = 1
+local TOOL_CYCLE_DELAY = 0.1
 
 -- Edit SERVER_HOP_DELAY to change the time (in seconds) before server hopping
 local SERVER_HOP_DELAY = 30
@@ -42,7 +42,7 @@ end
 
 local GUI_ID = randstr()
 
-local scriptUrl = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/cup.lua" -- Replace with your script's raw GitHub URL
+local scriptUrl = "https://raw.githubusercontent.com/YourRepo/YourScript.lua" -- Replace with your script's raw GitHub URL
 
 local queueTeleport = (syn and syn.queue_on_teleport) or
                      (fluxus and fluxus.queue_on_teleport) or
