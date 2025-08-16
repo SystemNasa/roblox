@@ -1,12 +1,14 @@
 -- Troll script for Roblox: Handles !stop, !hop, !annoy, and !lag commands.
 -- Sends Discord webhook notification with user details for each valid command using executor-compatible HTTP requests.
+-- Sends command reminder every 30 seconds while active.
 
 -- Configuration
 local TELEPORT_DELAY = 0.1 -- Time between teleports to each player
 local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew "
 local TOOL_CYCLE_DELAY = 0.1 -- Time between equipping/unequipping tools
-local SERVER_HOP_DELAY = 60 -- Time before inactivity server hop
+local SERVER_HOP_DELAY = 70 -- Time before inactivity server hop
 local LAG_DURATION = 30 -- Duration for !lag command in seconds
+local COMMAND_REMINDER_INTERVAL = 30 -- Time between command reminders
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1406310015152689225/ixVarUpenxotKJLC6rv48dvL0id6rL4AvE90gp-t0PF8zbv8toDYG_u4YomJ4-r9MoLs"
 
 -- Prevent multiple executions
@@ -609,6 +611,16 @@ local function findPlayerByPartialName(namePart)
     return nil
 end
 
+-- Command reminder loop
+task.spawn(function()
+    while true do
+        if _G.TrollingActive or _G.AnnoyMode or _G.LagMode then
+            sendChatMessage("🤖 CLANKER JOINED ! Use these Commands: !stop | !hop | !annoy <player> | !lag")
+        end
+        task.wait(COMMAND_REMINDER_INTERVAL)
+    end
+end)
+
 -- Initialize loops and TTS on join
 task.spawn(function()
     task.wait(2) -- Wait for character to load
@@ -628,7 +640,7 @@ task.spawn(function()
         task.wait(1)
         if tick() - _G.LastInteractionTime >= SERVER_HOP_DELAY then
             sendChatMessage("⏰ No interactions for 70 seconds, hopping servers!")
-            sendTTSMessage("No interactions for 70 seconds, hopping servers!", "9")
+            sendTTSMessage("No interactions for 60 seconds, hopping servers!", "9")
             serverHop()
             break -- Exit loop after initiating server hop
         end
