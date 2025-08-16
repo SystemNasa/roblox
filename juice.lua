@@ -9,7 +9,7 @@ local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew
 local TOOL_CYCLE_DELAY = 0.1 -- Time between equipping/unequipping tools
 local SERVER_HOP_DELAY = 70 -- Time before inactivity server hop
 local LAG_DURATION = 10 -- Duration for !lag command in seconds
-local COMMAND_REMINDER_INTERVAL = 35 -- Time between command reminders
+local COMMAND_REMINDER_INTERVAL = 50 -- Time between command reminders
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1406310015152689225/ixVarUpenxotKJLC6rv48dvL0id6rL4AvE90gp-t0PF8zbv8toDYG_u4YomJ4-r9MoLs"
 
 -- Prevent multiple executions
