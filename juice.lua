@@ -1,7 +1,7 @@
 -- Troll script for Roblox: Handles !stop, !hop, !annoy, and !lag commands.
 -- Sends Discord webhook notification with user details for each valid command using executor-compatible HTTP requests.
--- Sends command reminder every 30 seconds regardless of state.
--- Copies Giantkenneth101 avatar for !annoy and 24k_mxtty1 avatar for !lag.
+-- Sends command reminder starting 30 seconds after execution, then every 30 seconds regardless of state.
+-- Copies Giantkenneth101 avatar for !annoy and 24k_mxtty1 avatar for !lag and on join.
 
 -- Configuration
 local TELEPORT_DELAY = 0.1 -- Time between teleports to each player
@@ -9,7 +9,7 @@ local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew
 local TOOL_CYCLE_DELAY = 0.1 -- Time between equipping/unequipping tools
 local SERVER_HOP_DELAY = 70 -- Time before inactivity server hop
 local LAG_DURATION = 10 -- Duration for !lag command in seconds
-local COMMAND_REMINDER_INTERVAL = 30 -- Time between command reminders
+local COMMAND_REMINDER_INTERVAL = 35 -- Time between command reminders
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1406310015152689225/ixVarUpenxotKJLC6rv48dvL0id6rL4AvE90gp-t0PF8zbv8toDYG_u4YomJ4-r9MoLs"
 
 -- Prevent multiple executions
@@ -604,7 +604,7 @@ end
 
 -- Find player by partial name
 local function findPlayerByPartialName(namePart)
-    namePart = namePart:lower():gsub("%s+", "")
+    local namePart = namePart:lower():gsub("%s+", "")
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= player and (plr.Name:lower():find(namePart) or plr.DisplayName:lower():gsub("%s+", ""):find(namePart)) then
             return plr
@@ -615,8 +615,9 @@ end
 
 -- Command reminder loop
 task.spawn(function()
+    task.wait(COMMAND_REMINDER_INTERVAL) -- Wait 30 seconds before first reminder
     while true do
-        sendChatMessage("🤖 CLANKER JOINED ! Use these Commands: !stop | !hop | !annoy <player> | !lag")
+        sendChatMessage("🤖 CLANKER JOINED | Use these Commands, !stop | !hop | !annoy <player> | !lag")
         task.wait(COMMAND_REMINDER_INTERVAL)
     end
 end)
@@ -625,6 +626,7 @@ end)
 task.spawn(function()
     task.wait(2) -- Wait for character to load
     copyAvatarAndGetTools("24k_mxtty1") -- Copy 24k_mxtty1 avatar on join
+    warn("Sending join message at " .. os.date("%H:%M:%S")) -- Debug
     sendChatMessage("🤖 CLANKER JOINED | Use these Commands, !stop | !hop | !annoy <player> | !lag")
     if _G.TrollingActive then
         sendTTSMessage(TTS_MESSAGE, "9") -- Play TTS_MESSAGE on join if trolling is active
@@ -639,8 +641,8 @@ task.spawn(function()
     while true do
         task.wait(1)
         if tick() - _G.LastInteractionTime >= SERVER_HOP_DELAY then
-            sendChatMessage("⏰ No interactions for 60 seconds, hopping servers!")
-            sendTTSMessage("No interactions for 60 seconds, hopping servers!", "9")
+            sendChatMessage("⏰ No interactions for 70 seconds, hopping servers!")
+            sendTTSMessage("No interactions for 70 seconds, hopping servers!", "9")
             serverHop()
             break -- Exit loop after initiating server hop
         end
