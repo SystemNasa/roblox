@@ -16,7 +16,7 @@ local SERVER_HOP_DELAY = 70
 
 -- Edit TROLL_MESSAGES to change the chat messages sent before server hopping
 local TROLL_MESSAGES = {
-    "Catch me in the next server, losers  😜"
+    "Catch me in the next server, losers  😜",
     "Clankers forever, y'all can't keep up! 😎",
     "Server hopping in 5 seconds did yall enjoy the lag, clankers forever😈",
     "This server’s too boring, time to spice up another one! 😏"
