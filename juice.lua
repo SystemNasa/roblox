@@ -1,13 +1,14 @@
 -- Troll script for Roblox: Handles !stop, !hop, !annoy, and !lag commands.
 -- Sends Discord webhook notification with user details for each valid command using executor-compatible HTTP requests.
--- Sends command reminder every 30 seconds while active.
+-- Sends command reminder every 30 seconds regardless of state.
+-- Copies Giantkenneth101 avatar for !annoy and 24k_mxtty1 avatar for !lag.
 
 -- Configuration
 local TELEPORT_DELAY = 0.1 -- Time between teleports to each player
 local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew "
 local TOOL_CYCLE_DELAY = 0.1 -- Time between equipping/unequipping tools
 local SERVER_HOP_DELAY = 70 -- Time before inactivity server hop
-local LAG_DURATION = 30 -- Duration for !lag command in seconds
+local LAG_DURATION = 10 -- Duration for !lag command in seconds
 local COMMAND_REMINDER_INTERVAL = 30 -- Time between command reminders
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1406310015152689225/ixVarUpenxotKJLC6rv48dvL0id6rL4AvE90gp-t0PF8zbv8toDYG_u4YomJ4-r9MoLs"
 
@@ -335,12 +336,12 @@ end
 task.spawn(continuouslyCheckItems)
 
 -- Avatar and tools
-local function copyAvatarAndGetTools()
+local function copyAvatarAndGetTools(username)
     local success, err = pcall(function()
         local Event = ReplicatedStorage:FindFirstChild("EventInputModify")
         if Event then
-            Event:FireServer("24k_mxtty1")
-            createNotification("Copied avatar of 24k_mxtty1", COLORS.NOTIFICATION_SUCCESS)
+            Event:FireServer(username)
+            createNotification("Copied avatar of " .. username, COLORS.NOTIFICATION_SUCCESS)
         else
             error("EventInputModify not found")
         end
@@ -431,10 +432,11 @@ end
 -- Lag server function
 local function lagServer()
     if _G.LagMode or _G.TrollingActive or _G.AnnoyMode then
-        sendChatMessage("⚠️ Cannot lag server while trolling, annoying, or lagging!")
+        sendChatMessage("⚠️ Cannot lag while doing something, say !stop first.")
         createNotification("Cannot lag: Another mode is active", COLORS.NOTIFICATION_ERROR)
         return
     end
+    copyAvatarAndGetTools("24k_mxtty1") -- Copy 24k_mxtty1 avatar for !lag
     _G.LagMode = true
     sendChatMessage("🔥 Lagging server for " .. LAG_DURATION .. " seconds!")
     createNotification("Lagging server for " .. LAG_DURATION .. " seconds", COLORS.NOTIFICATION_WARNING)
@@ -614,9 +616,7 @@ end
 -- Command reminder loop
 task.spawn(function()
     while true do
-        if _G.TrollingActive or _G.AnnoyMode or _G.LagMode then
-            sendChatMessage("🤖 CLANKER JOINED ! Use these Commands: !stop | !hop | !annoy <player> | !lag")
-        end
+        sendChatMessage("🤖 CLANKER JOINED ! Use these Commands: !stop | !hop | !annoy <player> | !lag")
         task.wait(COMMAND_REMINDER_INTERVAL)
     end
 end)
@@ -624,8 +624,8 @@ end)
 -- Initialize loops and TTS on join
 task.spawn(function()
     task.wait(2) -- Wait for character to load
-    copyAvatarAndGetTools()
-    sendChatMessage("🤖 CLANKER JOINED ! Use these Commands: !stop | !hop | !annoy <player> | !lag")
+    copyAvatarAndGetTools("24k_mxtty1") -- Copy 24k_mxtty1 avatar on join
+    sendChatMessage("🤖 CLANKER JOINED | Use these Commands, !stop | !hop | !annoy <player> | !lag")
     if _G.TrollingActive then
         sendTTSMessage(TTS_MESSAGE, "9") -- Play TTS_MESSAGE on join if trolling is active
     end
@@ -639,7 +639,7 @@ task.spawn(function()
     while true do
         task.wait(1)
         if tick() - _G.LastInteractionTime >= SERVER_HOP_DELAY then
-            sendChatMessage("⏰ No interactions for 70 seconds, hopping servers!")
+            sendChatMessage("⏰ No interactions for 60 seconds, hopping servers!")
             sendTTSMessage("No interactions for 60 seconds, hopping servers!", "9")
             serverHop()
             break -- Exit loop after initiating server hop
@@ -687,6 +687,7 @@ task.spawn(function()
                     if annoyName then
                         local annoyPlayer = findPlayerByPartialName(annoyName)
                         if annoyPlayer then
+                            copyAvatarAndGetTools("Giantkenneth101") -- Copy Giantkenneth101 avatar for !annoy
                             sendChatMessage("🎯 Annoying " .. annoyPlayer.Name .. " now!")
                             sendTTSMessage("Annoying " .. annoyPlayer.Name .. " now!", "9")
                             _G.TrollingActive = false
@@ -744,6 +745,7 @@ task.spawn(function()
                     if annoyName then
                         local annoyPlayer = findPlayerByPartialName(annoyName)
                         if annoyPlayer then
+                            copyAvatarAndGetTools("Giantkenneth101") -- Copy Giantkenneth101 avatar for !annoy
                             sendChatMessage("🎯 Annoying " .. annoyPlayer.Name .. " now!")
                             sendTTSMessage("Annoying " .. annoyPlayer.Name .. " now!", "9")
                             _G.TrollingActive = false
