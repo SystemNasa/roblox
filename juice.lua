@@ -3,7 +3,7 @@
 --!native
 
 -- Edit TELEPORT_DELAY to change the time (in seconds) between teleports to each player
-local TELEPORT_DELAY = 0.001
+local TELEPORT_DELAY = 0.1
 
 -- Edit TTS_MESSAGE to change the text spoken by the TTS system
 local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew "
@@ -42,7 +42,7 @@ end
 
 local GUI_ID = randstr()
 
-local scriptUrl = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/cup.lua" -- Replace with your script's raw GitHub URL
+local scriptUrl = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/juice.lua" -- Replace with your script's raw GitHub URL
 
 local queueTeleport = (syn and syn.queue_on_teleport) or
                      (fluxus and fluxus.queue_on_teleport) or
