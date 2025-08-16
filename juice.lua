@@ -5,7 +5,7 @@
 local TELEPORT_DELAY = 0.1 -- Time between teleports to each player
 local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew "
 local TOOL_CYCLE_DELAY = 0.1 -- Time between equipping/unequipping tools
-local SERVER_HOP_DELAY = 70 -- Time before inactivity server hop
+local SERVER_HOP_DELAY = 10 -- Time before inactivity server hop
 local LAG_DURATION = 30 -- Duration for !lag command in seconds
 
 -- Prevent multiple executions
@@ -503,7 +503,6 @@ local function serverHop()
                 else
                     createNotification("Successfully joined new server!", COLORS.NOTIFICATION_SUCCESS)
                     if timerConnection then timerConnection:Disconnect() end
-                    -- Trigger TTS after successful server hop if trolling is active
                     if _G.TrollingActive then
                         sendTTSMessage(TTS_MESSAGE, "9")
                     end
@@ -548,11 +547,15 @@ end)
 task.spawn(function()
     while true do
         task.wait(1)
-        if tick() - _G.LastInteractionTime >= SERVER_HOP_DELAY then
+        local timeSinceInteraction = tick() - _G.LastInteractionTime
+        if timeSinceInteraction >= SERVER_HOP_DELAY then
             sendChatMessage("⏰ No interactions for 70 seconds, hopping servers!")
             sendTTSMessage("No interactions for 70 seconds, hopping servers!", "9")
+            warn("Inactivity detected, initiating server hop at " .. os.date("%H:%M:%S"))
             serverHop()
-            break
+            break -- Exit loop after initiating server hop
+        else
+            warn("Time since last interaction: " .. math.floor(timeSinceInteraction) .. " seconds")
         end
     end
 end)
@@ -570,6 +573,7 @@ task.spawn(function()
                 if not targetPlayer then return end
 
                 _G.LastInteractionTime = tick()
+                warn("Chat command received from " .. targetPlayer.Name .. ": " .. text)
 
                 if text:find("!stop") then
                     local success, err = pcall(function()
@@ -620,6 +624,7 @@ task.spawn(function()
                 local text = message.Message:lower()
 
                 _G.LastInteractionTime = tick()
+                warn("Chat command received from " .. sender.Name .. ": " .. text)
 
                 if text:find("!stop") then
                     local success, err = pcall(function()
