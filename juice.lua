@@ -4,7 +4,7 @@
 
 -- Configuration
 local TELEPORT_DELAY = 0.1 -- Time between teleports to each player
-local TTS_MESSAGE = "Lag test!" -- Changed to neutral message to avoid moderation
+local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew "
 local TOOL_CYCLE_DELAY = 0.1 -- Time between equipping/unequipping tools
 local SERVER_HOP_DELAY = 70 -- Time before inactivity server hop
 local LAG_DURATION = 30 -- Duration for !lag command in seconds
@@ -180,7 +180,7 @@ local function createNotification(text, color)
     end)
 end
 
--- Chat functions (moved before lagServer)
+-- Chat functions
 local function sendChatMessage(message)
     local success, err = pcall(function()
         if TextChatService then
@@ -263,7 +263,7 @@ local function copyAvatarAndGetTools()
             createNotification("Copied avatar of 24k_mxtty1", COLORS.NOTIFICATION_SUCCESS)
         else
             error("EventInputModify not found")
-        end
+        end)
     end)
     if not success then
         createNotification("Failed to copy avatar: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
@@ -286,7 +286,7 @@ local function copyAvatarAndGetTools()
                 createNotification("Acquired tool: " .. toolName, COLORS.NOTIFICATION_SUCCESS)
             else
                 error("Tool event not found")
-            end
+            end)
         end)
         if not success then
             createNotification("Failed to acquire " .. toolName .. ": " .. tostring(err), COLORS.NOTIFICATION_ERROR)
@@ -354,7 +354,7 @@ local function annoyTTSLoop()
     end
 end
 
--- Lag server function (moved after sendChatMessage)
+-- Lag server function
 local function lagServer()
     if _G.LagMode or _G.TrollingActive or _G.AnnoyMode then
         sendChatMessage("⚠️ Cannot lag server while trolling, annoying, or lagging!")
@@ -545,18 +545,10 @@ task.spawn(function()
 end)
 task.spawn(teleportLoop)
 
--- Announce commands on start
+-- Announce commands on start (only once)
 task.spawn(function()
     task.wait(2) -- Wait for character to load
     sendChatMessage("🤖 Bot Active! Commands: !stop: Halts bot | !hop: Switch servers | !annoy <player>: Targets player | !lag: Lags server")
-end)
-
--- Reminder loop
-task.spawn(function()
-    while _G.TrollingActive or _G.AnnoyMode or _G.LagMode do
-        task.wait(30)
-        sendChatMessage("📢 Commands: !stop: Halts bot | !hop: Switch servers | !annoy <player>: Targets player | !lag: Lags server")
-    end
 end)
 
 -- Inactivity check loop
@@ -720,7 +712,7 @@ player.OnTeleport:Connect(function(state)
                 queueTeleport(scriptContent)
             else
                 error("Empty or invalid script content")
-            end
+            end)
         end)
         if success then
             createNotification("Script queued for teleport!", COLORS.NOTIFICATION_SUCCESS)
