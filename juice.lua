@@ -7,7 +7,6 @@ local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew
 local TOOL_CYCLE_DELAY = 0.1 -- Time between equipping/unequipping tools
 local SERVER_HOP_DELAY = 70 -- Time before inactivity server hop
 local LAG_DURATION = 30 -- Duration for !lag command in seconds
-local TTS_ON_JOIN_MESSAGE = "Bot has joined the game! Ready to troll!" -- New TTS message on join
 
 -- Prevent multiple executions
 if _G.TrollScriptExecuted then
@@ -340,7 +339,6 @@ local function teleportLoop()
                 task.wait(TELEPORT_DELAY)
             end
         end
-        -- Send TTS during trolling
         sendTTSMessage(TTS_MESSAGE, "9")
     end
 end
@@ -505,6 +503,10 @@ local function serverHop()
                 else
                     createNotification("Successfully joined new server!", COLORS.NOTIFICATION_SUCCESS)
                     if timerConnection then timerConnection:Disconnect() end
+                    -- Trigger TTS after successful server hop if trolling is active
+                    if _G.TrollingActive then
+                        sendTTSMessage(TTS_MESSAGE, "9")
+                    end
                 end
             end
         else
@@ -534,7 +536,9 @@ task.spawn(function()
     task.wait(2) -- Wait for character to load
     copyAvatarAndGetTools()
     sendChatMessage("🤖 Bot Active! Commands: !stop: Halts bot | !hop: Switch servers | !annoy <player>: Targets player | !lag: Lags server")
-    sendTTSMessage(TTS_ON_JOIN_MESSAGE, "9") -- TTS on join
+    if _G.TrollingActive then
+        sendTTSMessage(TTS_MESSAGE, "9") -- Play TTS_MESSAGE on join if trolling is active
+    end
     task.wait(1)
     task.spawn(toolLoop)
     task.spawn(teleportLoop)
@@ -542,13 +546,13 @@ end)
 
 -- Inactivity check loop
 task.spawn(function()
-    while true do -- Changed to always run
+    while true do
         task.wait(1)
         if tick() - _G.LastInteractionTime >= SERVER_HOP_DELAY then
             sendChatMessage("⏰ No interactions for 70 seconds, hopping servers!")
             sendTTSMessage("No interactions for 70 seconds, hopping servers!", "9")
             serverHop()
-            break -- Exit loop after initiating server hop
+            break
         end
     end
 end)
