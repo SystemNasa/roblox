@@ -16,14 +16,14 @@ local SERVER_HOP_DELAY = 70
 
 -- Edit TROLL_MESSAGES to change the chat messages sent before server hopping
 local TROLL_MESSAGES = {
-    "Catch me in the next server, losers! 😜",
-    "Server hopping like a pro, y'all can't keep up! 😎",
-    "Peace out, gonna annoy some newbies elsewhere! 😈",
+    "Catch me in the next server, losers  😜"
+    "Clankers forever, y'all can't keep up! 😎",
+    "Server hopping in 5 seconds did yall enjoy the lag, clankers forever😈",
     "This server’s too boring, time to spice up another one! 😏"
 }
 
 -- Edit JOIN_MESSAGE to change the message sent when joining a new server
-local JOIN_MESSAGE = "Your VIP has arrived to ruin your day! 😝"
+local JOIN_MESSAGE = "Your CLANKER has arrived to ruin your day! 😝"
 
 -- Prevent multiple executions
 if _G.TrollScriptExecuted then
