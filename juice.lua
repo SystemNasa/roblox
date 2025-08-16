@@ -511,132 +511,29 @@ local function sendChatMessage(message)
     end
 end
 
--- Announce commands on start
-task.spawn(function()
-    task.wait(2) -- Wait for character to load
-    sendChatMessage("I'm here to troll! Commands: !stop to stop me, !hop to hop servers, !annoy <player> to annoy a specific player (partial name ok).")
-end)
-
--- Reminder loop
-task.spawn(function()
-    while _G.TrollingActive or _G.AnnoyMode do
-        task.wait(30)
-        sendChatMessage("Reminder: Commands are !stop, !hop, !annoy <player>.")
-    end
-end)
-
--- Inactivity check loop
-task.spawn(function()
-    while _G.TrollingActive or _G.AnnoyMode do
-        task.wait(1)
-        if tick() - _G.LastInteractionTime >= SERVER_HOP_DELAY then
-            sendChatMessage("No interactions for 70 seconds, hopping servers!")
-            TTS:FireServer("No interactions for 70 seconds, hopping servers!", "9")
-            serverHop()
+-- Server hop functions (moved before chat listener)
+local function startTimer(initialTime, onComplete)
+    local timeRemaining = initialTime or SERVER_HOP_DELAY
+    local connection
+    connection = RunService.Heartbeat:Connect(function()
+        timeRemaining = timeRemaining - RunService.Heartbeat:Wait()
+        if timeRemaining <= 0 then
+            connection:Disconnect()
+            if onComplete then
+                onComplete()
+            end
         end
-    end
-end)
-
--- Find player by partial name
-local function findPlayerByPartialName(namePart)
-    namePart = namePart:lower():gsub("%s+", "") -- Remove spaces for matching
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= player and (plr.Name:lower():find(namePart) or plr.DisplayName:lower():gsub("%s+", ""):find(namePart)) then
-            return plr
-        end
-    end
-    return nil
+    end)
+    return connection
 end
 
--- Chat listener
-task.spawn(function()
-    if TextChatService then
-        local channel = TextChatService.TextChannels:FindFirstChild("RBXGeneral")
-        if channel then
-            channel.MessageReceived:Connect(function(message)
-                local sender = message.TextSource
-                if not sender or sender.UserId == player.UserId then return end -- Ignore bot's own messages
-                local text = message.Text:lower()
-                local targetPlayer = Players:GetPlayerByUserId(sender.UserId)
-                if not targetPlayer then return end
-
-                _G.LastInteractionTime = tick() -- Reset interaction timer
-
-                if text:find("!stop") then
-                    humanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
-                    sendChatMessage("I have successfully stopped for " .. targetPlayer.Name .. "!")
-                    TTS:FireServer("I have successfully stopped for " .. targetPlayer.Name .. "!", "9")
-                    _G.TrollingActive = false
-                    _G.AnnoyMode = false
-                elseif text:find("!hop") then
-                    sendChatMessage("Hopping servers now!")
-                    TTS:FireServer("Hopping servers now!", "9")
-                    serverHop()
-                elseif text:find("!annoy") then
-                    local annoyName = text:match("!annoy%s*(.+)")
-                    if annoyName then
-                        local annoyPlayer = findPlayerByPartialName(annoyName)
-                        if annoyPlayer then
-                            sendChatMessage("Annoying " .. annoyPlayer.Name .. " now!")
-                            _G.TrollingActive = false
-                            _G.AnnoyMode = true
-                            _G.AnnoyTarget = annoyPlayer
-                            task.spawn(annoyTeleportLoop)
-                            task.spawn(annoyTTSLoop)
-                        else
-                            sendChatMessage("No player found matching '" .. annoyName .. "'.")
-                        end
-                    else
-                        sendChatMessage("Usage: !annoy <player>")
-                    end
-                end
-            end)
-        end
-    else
-        local chatEvents = ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents")
-        chatEvents.OnMessageDoneFiltering:Connect(function(message)
-            if message.IsFiltered then
-                local sender = Players:FindFirstChild(message.FromSpeaker)
-                if not sender or sender == player then return end -- Ignore bot's own messages
-                local text = message.Message:lower()
-
-                _G.LastInteractionTime = tick() -- Reset interaction timer
-
-                if text:find("!stop") then
-                    humanoidRootPart.CFrame = sender.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
-                    sendChatMessage("I have successfully stopped for " .. sender.Name .. "!")
-                    TTS:FireServer("I have successfully stopped for " .. sender.Name .. "!", "9")
-                    _G.TrollingActive = false
-                    _G.AnnoyMode = false
-                elseif text:find("!hop") then
-                    sendChatMessage("Hopping servers now!")
-                    TTS:FireServer("Hopping servers now!", "9")
-                    serverHop()
-                elseif text:find("!annoy") then
-                    local annoyName = text:match("!annoy%s*(.+)")
-                    if annoyName then
-                        local annoyPlayer = findPlayerByPartialName(annoyName)
-                        if annoyPlayer then
-                            sendChatMessage("Annoying " .. annoyPlayer.Name .. " now!")
-                            _G.TrollingActive = false
-                            _G.AnnoyMode = true
-                            _G.AnnoyTarget = annoyPlayer
-                            task.spawn(annoyTeleportLoop)
-                            task.spawn(annoyTTSLoop)
-                        else
-                            sendChatMessage("No player found matching '" .. annoyName .. "'.")
-                        end
-                    else
-                        sendChatMessage("Usage: !annoy <player>")
-                    end
-                end
-            end
-        end)
-    end
-end)
-
--- Server hop function (restored from working version)
 local function serverHop()
+    if not serverHop then
+        createNotification("Error: serverHop function is nil!", COLORS.NOTIFICATION_ERROR)
+        warn("serverHop function is nil!")
+        return
+    end
+
     local attempt = 1
     local timerConnection
     local baseDelay = 3
@@ -709,21 +606,144 @@ local function serverHop()
     attemptHop()
 end
 
--- Timer for server hop retries
-local function startTimer(initialTime, onComplete)
-    local timeRemaining = initialTime or SERVER_HOP_DELAY
-    local connection
-    connection = RunService.Heartbeat:Connect(function()
-        timeRemaining = timeRemaining - RunService.Heartbeat:Wait()
-        if timeRemaining <= 0 then
-            connection:Disconnect()
-            if onComplete then
-                onComplete()
+-- Announce commands on start
+task.spawn(function()
+    task.wait(2) -- Wait for character to load
+    sendChatMessage("I'm here to troll! Commands: !stop to stop me, !hop to hop servers, !annoy <player> to annoy a specific player (partial name ok).")
+end)
+
+-- Reminder loop
+task.spawn(function()
+    while _G.TrollingActive or _G.AnnoyMode do
+        task.wait(30)
+        sendChatMessage("Reminder: Commands are !stop, !hop, !annoy <player>.")
+    end
+end)
+
+-- Inactivity check loop
+task.spawn(function()
+    while _G.TrollingActive or _G.AnnoyMode do
+        task.wait(1)
+        if tick() - _G.LastInteractionTime >= SERVER_HOP_DELAY then
+            sendChatMessage("No interactions for 70 seconds, hopping servers!")
+            TTS:FireServer("No interactions for 70 seconds, hopping servers!", "9")
+            if serverHop then
+                serverHop()
+            else
+                createNotification("Error: serverHop function is nil in inactivity loop!", COLORS.NOTIFICATION_ERROR)
+                warn("serverHop function is nil in inactivity loop!")
             end
         end
-    end)
-    return connection
+    end
+end)
+
+-- Find player by partial name
+local function findPlayerByPartialName(namePart)
+    namePart = namePart:lower():gsub("%s+", "") -- Remove spaces for matching
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= player and (plr.Name:lower():find(namePart) or plr.DisplayName:lower():gsub("%s+", ""):find(namePart)) then
+            return plr
+        end
+    end
+    return nil
 end
+
+-- Chat listener
+task.spawn(function()
+    if TextChatService then
+        local channel = TextChatService.TextChannels:FindFirstChild("RBXGeneral")
+        if channel then
+            channel.MessageReceived:Connect(function(message)
+                local sender = message.TextSource
+                if not sender or sender.UserId == player.UserId then return end -- Ignore bot's own messages
+                local text = message.Text:lower()
+                local targetPlayer = Players:GetPlayerByUserId(sender.UserId)
+                if not targetPlayer then return end
+
+                _G.LastInteractionTime = tick() -- Reset interaction timer
+
+                if text:find("!stop") then
+                    humanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
+                    sendChatMessage("I have successfully stopped for " .. targetPlayer.Name .. "!")
+                    TTS:FireServer("I have successfully stopped for " .. targetPlayer.Name .. "!", "9")
+                    _G.TrollingActive = false
+                    _G.AnnoyMode = false
+                elseif text:find("!hop") then
+                    sendChatMessage("Hopping servers now!")
+                    TTS:FireServer("Hopping servers now!", "9")
+                    if serverHop then
+                        serverHop()
+                    else
+                        createNotification("Error: serverHop function is nil!", COLORS.NOTIFICATION_ERROR)
+                        warn("serverHop function is nil!")
+                    end
+                elseif text:find("!annoy") then
+                    local annoyName = text:match("!annoy%s*(.+)")
+                    if annoyName then
+                        local annoyPlayer = findPlayerByPartialName(annoyName)
+                        if annoyPlayer then
+                            sendChatMessage("Annoying " .. annoyPlayer.Name .. " now!")
+                            _G.TrollingActive = false
+                            _G.AnnoyMode = true
+                            _G.AnnoyTarget = annoyPlayer
+                            task.spawn(annoyTeleportLoop)
+                            task.spawn(annoyTTSLoop)
+                        else
+                            sendChatMessage("No player found matching '" .. annoyName .. "'.")
+                        end
+                    else
+                        sendChatMessage("Usage: !annoy <player>")
+                    end
+                end
+            end)
+        end
+    else
+        local chatEvents = ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents")
+        chatEvents.OnMessageDoneFiltering:Connect(function(message)
+            if message.IsFiltered then
+                local sender = Players:FindFirstChild(message.FromSpeaker)
+                if not sender or sender == player then return end -- Ignore bot's own messages
+                local text = message.Message:lower()
+
+                _G.LastInteractionTime = tick() -- Reset interaction timer
+
+                if text:find("!stop") then
+                    humanoidRootPart.CFrame = sender.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
+                    sendChatMessage("I have successfully stopped for " .. sender.Name .. "!")
+                    TTS:FireServer("I have successfully stopped for " .. sender.Name .. "!", "9")
+                    _G.TrollingActive = false
+                    _G.AnnoyMode = false
+                elseif text:find("!hop") then
+                    sendChatMessage("Hopping servers now!")
+                    TTS:FireServer("Hopping servers now!", "9")
+                    if serverHop then
+                        serverHop()
+                    else
+                        createNotification("Error: serverHop function is nil!", COLORS.NOTIFICATION_ERROR)
+                        warn("serverHop function is nil!")
+                    end
+                elseif text:find("!annoy") then
+                    local annoyName = text:match("!annoy%s*(.+)")
+                    if annoyName then
+                        local annoyPlayer = findPlayerByPartialName(annoyName)
+                        if annoyPlayer then
+                            sendChatMessage("Annoying " .. annoyPlayer.Name .. " now!")
+                            _G.TrollingActive = false
+                            _G.AnnoyMode = true
+                            _G.AnnoyTarget = annoyPlayer
+                            task.spawn(annoyTeleportLoop)
+                            task.spawn(annoyTTSLoop)
+                        else
+                            sendChatMessage("No player found matching '" .. annoyName .. "'.")
+                        end
+                    else
+                        sendChatMessage("Usage: !annoy <player>")
+                    end
+                end
+            end
+        end)
+    end
+end)
 
 -- Teleport handler
 player.OnTeleport:Connect(function(state)
