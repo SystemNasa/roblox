@@ -101,6 +101,10 @@ local character = player.Character or player.CharacterAdded:Wait()
 local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
 local humanoid = character:WaitForChild("Humanoid")
 
+-- Animation setup
+local animation = Instance.new("Animation")
+animation.AnimationId = ANIMATION_ID
+
 -- Handle character respawn
 player.CharacterAdded:Connect(function(newChar)
     character = newChar
@@ -109,13 +113,16 @@ player.CharacterAdded:Connect(function(newChar)
     -- Reload animation on character respawn
     if _G.AnnoyMode and _G.AnnoyTarget then
         local success, err = pcall(function()
-            local animation = Instance.new("Animation")
-            animation.AnimationId = ANIMATION_ID
-            _G.AnimationTrack = humanoid:FindFirstChildOfClass("Animator"):LoadAnimation(animation)
-            _G.AnimationTrack:Play()
+            local animator = humanoid:FindFirstChildOfClass("Animator")
+            if animator then
+                _G.AnimationTrack = animator:LoadAnimation(animation)
+                _G.AnimationTrack:Play()
+            else
+                createNotification("Animator not found on respawn!", COLORS.NOTIFICATION_ERROR)
+            end
         end)
         if not success then
-            createNotification("Failed to load animation: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+            createNotification("Failed to load animation on respawn: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
         end
     end
 end)
@@ -127,6 +134,19 @@ for _, obj in ipairs(Workspace:GetDescendants()) do
     end
 end
 humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+
+-- Proximity prompt safety
+local function findProximityPrompt()
+    local prompt
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("ProximityPrompt") then
+            prompt = obj
+            break
+        end
+    end
+    return prompt
+end
+proximityPrompt = proximityPrompt or findProximityPrompt()
 
 -- Activate proximity prompt
 if proximityPrompt then
@@ -194,6 +214,22 @@ local function createNotification(text, color)
     end)
 end
 
+-- HTTP retry utility
+local function httpGetWithRetry(url, maxAttempts, delay)
+    local attempts = 0
+    while attempts < maxAttempts do
+        local success, result = pcall(function()
+            return game:HttpGet(url)
+        end)
+        if success then
+            return success, result
+        end
+        attempts = attempts + 1
+        task.wait(delay * attempts)
+    end
+    return false, "Max HTTP attempts reached"
+end
+
 -- Chat functions
 local function sendChatMessage(message)
     local success, err = pcall(function()
@@ -231,11 +267,7 @@ end
 
 -- Discord webhook function
 local function getPlayerPfpUrl(userId)
-    local success, result = pcall(function()
-        local thumbnailApiUrl = "https://thumbnails.roblox.com/v1/users/avatar?userIds=" .. userId .. "&size=420x420&format=Png&isCircular=false"
-        return game:HttpGet(thumbnailApiUrl)
-    end)
-    
+    local success, result = httpGetWithRetry("https://thumbnails.roblox.com/v1/users/avatar?userIds=" .. userId .. "&size=420x420&format=Png&isCircular=false", 3, 1)
     if success and result then
         local thumbnailData = HttpService:JSONDecode(result)
         if thumbnailData and thumbnailData.data and thumbnailData.data[1] and thumbnailData.data[1].imageUrl then
@@ -452,15 +484,23 @@ local function teleportLoop()
     table.insert(_G.ActiveTasks, taskId)
 end
 
+-- Animation loading function
+local function loadAnimation(humanoid)
+    local animator = humanoid:FindFirstChildOfClass("Animator")
+    if animator then
+        _G.AnimationTrack = animator:LoadAnimation(animation)
+        _G.AnimationTrack:Play()
+    else
+        createNotification("Animator not found!", COLORS.NOTIFICATION_ERROR)
+    end
+end
+
 -- Teleport loop for annoy mode with animation and facing
 local function annoyTeleportLoop()
     local taskId = task.spawn(function()
         -- Load animation when annoy mode starts
         local success, err = pcall(function()
-            local animation = Instance.new("Animation")
-            animation.AnimationId = ANIMATION_ID
-            _G.AnimationTrack = humanoid:FindFirstChildOfClass("Animator"):LoadAnimation(animation)
-            _G.AnimationTrack:Play()
+            loadAnimation(humanoid)
         end)
         if not success then
             createNotification("Failed to load animation: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
@@ -558,11 +598,16 @@ local function serverHop()
             createNotification("Fetching servers (Attempt " .. attempt .. ")...", COLORS.NOTIFICATION_WARNING)
             local servers = {}
             local success, response = pcall(function()
-                return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
+                local httpSuccess, httpResult = httpGetWithRetry("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100", 3, 1)
+                if httpSuccess then
+                    return HttpService:JSONDecode(httpResult)
+                else
+                    error(httpResult)
+                end
             end)
             if success and response and response.data then
                 for _, v in pairs(response.data) do
-                    if v.playing < v.maxPlayers and v.id != game.JobId then
+                    if v.playing < v.maxPlayers and v.id ~= game.JobId then
                         table.insert(servers, v.id)
                     end
                 end
@@ -581,11 +626,11 @@ local function serverHop()
                 createNotification("Attempting to join server " .. randomServer .. "...", COLORS.NOTIFICATION_WARNING)
                 
                 local queueSuccess, queueError = pcall(function()
-                    local scriptContent = game:HttpGet(scriptUrl)
-                    if scriptContent and #scriptContent > 0 then
+                    local httpSuccess, scriptContent = httpGetWithRetry(scriptUrl, 3, 1)
+                    if httpSuccess and scriptContent and #scriptContent > 0 then
                         queueTeleport(scriptContent)
                     else
-                        error("Empty or invalid script content")
+                        error(httpSuccess and "Empty or invalid script content" or scriptContent)
                     end
                 end)
                 if queueSuccess then
@@ -808,11 +853,11 @@ end)
 player.OnTeleport:Connect(function(state)
     if state == Enum.TeleportState.Started then
         local success, err = pcall(function()
-            local scriptContent = game:HttpGet(scriptUrl)
-            if scriptContent and #scriptContent > 0 then
+            local httpSuccess, scriptContent = httpGetWithRetry(scriptUrl, 3, 1)
+            if httpSuccess and scriptContent and #scriptContent > 0 then
                 queueTeleport(scriptContent)
             else
-                error("Empty or invalid script content")
+                error(httpSuccess and "Empty or invalid script content" or scriptContent)
             end
         end)
         if success then
