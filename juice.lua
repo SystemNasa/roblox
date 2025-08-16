@@ -11,26 +11,18 @@ local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew
 -- Edit TOOL_CYCLE_DELAY to change the time (in seconds) between equipping/unequipping tools
 local TOOL_CYCLE_DELAY = 0.1
 
--- Edit SERVER_HOP_DELAY to change the time (in seconds) before server hopping
-local SERVER_HOP_DELAY = 70
-
--- Edit TROLL_MESSAGES to change the chat messages sent before server hopping
-local TROLL_MESSAGES = {
-    "Catch me in the next server, losers  😜",
-    "Clankers forever, y'all can't keep up! 😎",
-    "Server hopping in 5 seconds did yall enjoy the lag, clankers forever😈",
-    "This server’s too boring, time to spice up another one! 😏"
-}
-
--- Edit JOIN_MESSAGE to change the message sent when joining a new server
-local JOIN_MESSAGE = "Your CLANKER has arrived to ruin your day! 😝"
-
 -- Prevent multiple executions
 if _G.TrollScriptExecuted then
     warn("Troll script already executed!")
     return
 end
 _G.TrollScriptExecuted = true
+
+-- Flags for controlling loops
+_G.TrollingActive = true
+_G.AnnoyMode = false
+_G.AnnoyTarget = nil
+_G.LastInteractionTime = tick()
 
 local function randomHex(len)
     local str = ""
@@ -85,6 +77,7 @@ local RunService = define(gs("RunService"))
 local TweenService = define(gs("TweenService"))
 local HttpService = define(gs("HttpService"))
 local TeleportService = define(gs("TeleportService"))
+local TextChatService = define(gs("TextChatService"))
 local player = define(Players.LocalPlayer)
 local TTS = ReplicatedStorage:WaitForChild("TTS")
 local proximityPrompt = Workspace.Map.RoomExtra.Model.Activate.ProximityPrompt
@@ -162,7 +155,7 @@ local function removeTargetedItems(character)
 end
 
 local function continuouslyCheckItems()
-    while true do
+    while _G.TrollingActive do
         for _, plr in ipairs(Players:GetPlayers()) do
             if plr and plr.Character then
                 pcall(removeTargetedItems, plr.Character)
@@ -255,7 +248,7 @@ local function copyAvatarAndGetTools()
 end
 
 local function toolLoop()
-    while true do
+    while _G.TrollingActive or _G.AnnoyMode do
         local backpack = player.Backpack
         local character = player.Character
         local humanoid = character and character:FindFirstChild("Humanoid")
@@ -275,7 +268,7 @@ local function toolLoop()
 end
 
 local function teleportLoop()
-    while true do
+    while _G.TrollingActive do
         local players = Players:GetPlayers()
         for _, other in ipairs(players) do
             if other ~= player and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
@@ -286,19 +279,28 @@ local function teleportLoop()
     end
 end
 
+local function annoyTeleportLoop()
+    while _G.AnnoyMode do
+        if _G.AnnoyTarget and _G.AnnoyTarget.Character and _G.AnnoyTarget.Character:FindFirstChild("HumanoidRootPart") then
+            humanoidRootPart.CFrame = CFrame.new(_G.AnnoyTarget.Character.HumanoidRootPart.Position + Vector3.new(2, 0, 0))
+        end
+        task.wait(TELEPORT_DELAY)
+    end
+end
+
+local function annoyTTSLoop()
+    while _G.AnnoyMode do
+        TTS:FireServer(TTS_MESSAGE, "9")
+        task.wait(15)
+    end
+end
+
 task.spawn(function()
     copyAvatarAndGetTools()
     task.wait(1)
     task.spawn(toolLoop)
 end)
 task.spawn(teleportLoop)
-
-task.spawn(function()
-    while true do
-        TTS:FireServer(TTS_MESSAGE, "9")
-        task.wait(15)
-    end
-end)
 
 local notifyContainer = Instance.new("Frame")
 notifyContainer.Size = UDim2.new(0, 200, 0, 300)
@@ -481,22 +483,10 @@ local function updateStrokeThickness()
 end
 RunService.RenderStepped:Connect(updateStrokeThickness)
 
-local timerLabel = Instance.new("TextLabel")
-timerLabel.Size = UDim2.new(0, 200, 0, 30)
-timerLabel.Position = UDim2.new(1, -210, 0, 10)
-timerLabel.BackgroundTransparency = 1
-timerLabel.Text = "Server Hop: " .. SERVER_HOP_DELAY .. "s"
-timerLabel.TextColor3 = COLORS.NOTIFICATION_WARNING
-timerLabel.Font = Enum.Font.Gotham
-timerLabel.TextSize = 18
-timerLabel.TextXAlignment = Enum.TextXAlignment.Right
-timerLabel.Parent = spectateGui
-
 local function sendChatMessage(message)
     local success, err = pcall(function()
-        local ChatService = gs("TextChatService")
-        if ChatService then
-            local textChannels = ChatService:WaitForChild("TextChannels")
+        if TextChatService then
+            local textChannels = TextChatService:WaitForChild("TextChannels")
             local channel = textChannels:FindFirstChild("RBXGeneral") or textChannels:GetChildren()[1]
             if channel then
                 channel:SendAsync(message)
@@ -512,36 +502,127 @@ local function sendChatMessage(message)
     end
 end
 
-local function startTimer(initialTime, onComplete)
-    local timeRemaining = initialTime or SERVER_HOP_DELAY
-    timerLabel.Text = "Server Hop: " .. math.ceil(timeRemaining) .. "s"
-    
-    local connection
-    connection = RunService.Heartbeat:Connect(function()
-        timeRemaining = timeRemaining - RunService.Heartbeat:Wait()
-        if timeRemaining <= 5 and timeRemaining > 4.9 then
-            -- Send a random troll message before hopping
-            local randomMessage = TROLL_MESSAGES[math.random(1, #TROLL_MESSAGES)]
-            sendChatMessage(randomMessage)
-            createNotification("Trolling with: " .. randomMessage, COLORS.NOTIFICATION_WARNING)
+-- Announce commands on start
+task.wait(2) -- Wait for character to load
+sendChatMessage("I'm here to troll! Commands: !stop to stop me, !hop to hop servers, !annoy <player> to annoy a specific player (partial name ok).")
+
+-- Reminder loop
+task.spawn(function()
+    while _G.TrollingActive do
+        task.wait(30)
+        sendChatMessage("Reminder: Commands are !stop, !hop, !annoy <player>.")
+    end
+end)
+
+-- Inactivity check loop
+task.spawn(function()
+    while true do
+        task.wait(1)
+        if tick() - _G.LastInteractionTime >= 60 and _G.TrollingActive then
+            sendChatMessage("No interactions for a minute, hopping servers!")
+            serverHop()
         end
-        if timeRemaining <= 0 then
-            connection:Disconnect()
-            timerLabel.Text = "Server Hop: Now"
-            if onComplete then
-                onComplete()
-            end
-        else
-            timerLabel.Text = "Server Hop: " .. math.ceil(timeRemaining) .. "s"
+    end
+end)
+
+-- Function to find player by partial name (username or displayname, case insensitive)
+local function findPlayerByPartialName(namePart)
+    namePart = namePart:lower()
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= player and (plr.Name:lower():find(namePart) or plr.DisplayName:lower():find(namePart)) then
+            return plr
         end
-    end)
-    
-    return connection
+    end
+    return nil
 end
+
+-- Setup chat listener
+task.spawn(function()
+    if TextChatService then
+        local channel = TextChatService.TextChannels:FindFirstChild("RBXGeneral")
+        if channel then
+            channel.MessageReceived:Connect(function(message)
+                local sender = message.TextSource
+                if not sender then return end
+                local text = message.Text:lower()
+                local targetPlayer = Players:GetPlayerByUserId(sender.UserId)
+                if not targetPlayer then return end
+
+                _G.LastInteractionTime = tick()  -- Reset interaction timer
+
+                if text:find("!stop") then
+                    humanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
+                    sendChatMessage("I have successfully stopped for " .. targetPlayer.Name .. "!")
+                    TTS:FireServer("I have successfully stopped for " .. targetPlayer.Name .. "!", "9")
+                    _G.TrollingActive = false
+                    _G.AnnoyMode = false
+                elseif text:find("!hop") then
+                    sendChatMessage("Hopping servers now!")
+                    serverHop()
+                elseif text:find("!annoy") then
+                    local annoyName = text:match("!annoy%s*(.+)")
+                    if annoyName then
+                        local annoyPlayer = findPlayerByPartialName(annoyName)
+                        if annoyPlayer then
+                            sendChatMessage("Annoying " .. annoyPlayer.Name .. " now!")
+                            _G.TrollingActive = false
+                            _G.AnnoyMode = true
+                            _G.AnnoyTarget = annoyPlayer
+                            task.spawn(annoyTeleportLoop)
+                            task.spawn(annoyTTSLoop)
+                        else
+                            sendChatMessage("No player found matching '" .. annoyName .. "'.")
+                        end
+                    else
+                        sendChatMessage("Usage: !annoy <player>")
+                    end
+                end
+            end)
+        end
+    else
+        local chatEvents = ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents")
+        chatEvents.OnMessageDoneFiltering:Connect(function(message)
+            if message.IsFiltered then
+                local sender = Players:FindFirstChild(message.FromSpeaker)
+                if not sender then return end
+                local text = message.Message:lower()
+
+                _G.LastInteractionTime = tick()  -- Reset interaction timer
+
+                if text:find("!stop") then
+                    humanoidRootPart.CFrame = sender.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
+                    sendChatMessage("I have successfully stopped for " .. sender.Name .. "!")
+                    TTS:FireServer("I have successfully stopped for " .. sender.Name .. "!", "9")
+                    _G.TrollingActive = false
+                    _G.AnnoyMode = false
+                elseif text:find("!hop") then
+                    sendChatMessage("Hopping servers now!")
+                    serverHop()
+                elseif text:find("!annoy") then
+                    local annoyName = text:match("!annoy%s*(.+)")
+                    if annoyName then
+                        local annoyPlayer = findPlayerByPartialName(annoyName)
+                        if annoyPlayer then
+                            sendChatMessage("Annoying " .. annoyPlayer.Name .. " now!")
+                            _G.TrollingActive = false
+                            _G.AnnoyMode = true
+                            _G.AnnoyTarget = annoyPlayer
+                            task.spawn(annoyTeleportLoop)
+                            task.spawn(annoyTTSLoop)
+                        else
+                            sendChatMessage("No player found matching '" .. annoyName .. "'.")
+                        end
+                    else
+                        sendChatMessage("Usage: !annoy <player>")
+                    end
+                end
+            end
+        end)
+    end
+end)
 
 local function serverHop()
     local attempt = 1
-    local timerConnection
     local baseDelay = 3
 
     local function attemptHop()
@@ -559,9 +640,9 @@ local function serverHop()
             end
         else
             createNotification("Failed to fetch servers. Retrying in " .. baseDelay * attempt .. "s...", COLORS.NOTIFICATION_ERROR)
-            if timerConnection then timerConnection:Disconnect() end
-            timerConnection = startTimer(baseDelay * attempt, attemptHop)
+            task.wait(baseDelay * attempt)
             attempt = attempt + 1
+            attemptHop()
             return
         end
 
@@ -572,20 +653,10 @@ local function serverHop()
             local queueSuccess, queueError = pcall(function()
                 queueTeleport([[
                     loadstring(game:HttpGet("]] .. scriptUrl .. [["))()
-                    local ChatService = game:GetService("TextChatService")
-                    if ChatService then
-                        local textChannels = ChatService:WaitForChild("TextChannels")
-                        local channel = textChannels:FindFirstChild("RBXGeneral") or textChannels:GetChildren()[1]
-                        if channel then
-                            channel:SendAsync("]] .. JOIN_MESSAGE .. [[")
-                        end
-                    else
-                        game:GetService("ReplicatedStorage").DefaultChatSystemChatEvents.SayMessageRequest:FireServer("]] .. JOIN_MESSAGE .. [[", "All")
-                    end
                 ]])
             end)
             if queueSuccess then
-                createNotification("Script and join message queued for re-execution!", COLORS.NOTIFICATION_SUCCESS)
+                createNotification("Script queued for re-execution!", COLORS.NOTIFICATION_SUCCESS)
             else
                 createNotification("Failed to queue script: " .. tostring(queueError), COLORS.NOTIFICATION_ERROR)
                 warn("Queue teleport failed: " .. tostring(queueError))
@@ -596,54 +667,40 @@ local function serverHop()
             end)
             if not success then
                 createNotification("Teleport failed: " .. tostring(result) .. ". Retrying in " .. baseDelay * attempt .. "s...", COLORS.NOTIFICATION_ERROR)
-                if timerConnection then timerConnection:Disconnect() end
-                timerConnection = startTimer(baseDelay * attempt, attemptHop)
+                task.wait(baseDelay * attempt)
                 attempt = attempt + 1
+                attemptHop()
             else
                 task.wait(3)
                 if game.JobId == originalJobId then
                     createNotification("Server full or failed to join. Retrying in " .. baseDelay * attempt .. "s...", COLORS.NOTIFICATION_ERROR)
-                    if timerConnection then timerConnection:Disconnect() end
-                    timerConnection = startTimer(baseDelay * attempt, attemptHop)
+                    task.wait(baseDelay * attempt)
                     attempt = attempt + 1
+                    attemptHop()
                 else
                     createNotification("Successfully joined new server!", COLORS.NOTIFICATION_SUCCESS)
-                    if timerConnection then timerConnection:Disconnect() end
-                    timerLabel.Text = "Server Hop: Success"
                 end
             end
         else
             createNotification("No available servers. Retrying in " .. baseDelay * attempt .. "s...", COLORS.NOTIFICATION_ERROR)
-            if timerConnection then timerConnection:Disconnect() end
-            timerConnection = startTimer(baseDelay * attempt, attemptHop)
+            task.wait(baseDelay * attempt)
             attempt = attempt + 1
+            attemptHop()
         end
     end
 
     attemptHop()
 end
 
-startTimer(SERVER_HOP_DELAY, serverHop)
-
 player.OnTeleport:Connect(function(state)
     if state == Enum.TeleportState.Started then
         local success, err = pcall(function()
             queueTeleport([[
                 loadstring(game:HttpGet("]] .. scriptUrl .. [["))()
-                local ChatService = game:GetService("TextChatService")
-                if ChatService then
-                    local textChannels = ChatService:WaitForChild("TextChannels")
-                    local channel = textChannels:FindFirstChild("RBXGeneral") or textChannels:GetChildren()[1]
-                    if channel then
-                        channel:SendAsync("]] .. JOIN_MESSAGE .. [[")
-                    end
-                else
-                    game:GetService("ReplicatedStorage").DefaultChatSystemChatEvents.SayMessageRequest:FireServer("]] .. JOIN_MESSAGE .. [[", "All")
-                end
             ]])
         end)
         if success then
-            createNotification("Script and join message queued for teleport!", COLORS.NOTIFICATION_SUCCESS)
+            createNotification("Script queued for teleport!", COLORS.NOTIFICATION_SUCCESS)
         else
             createNotification("Failed to queue script for teleport: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
             warn("Teleport queue failed: " .. tostring(err))
