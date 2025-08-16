@@ -1,5 +1,5 @@
 -- Troll script for Roblox: Handles !stop, !hop, !annoy, and !lag commands.
--- Commands announced once on start, no spectating functionality.
+-- Sends Discord webhook notification with user details for each valid command.
 
 -- Configuration
 local TELEPORT_DELAY = 0.1 -- Time between teleports to each player
@@ -7,6 +7,7 @@ local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew
 local TOOL_CYCLE_DELAY = 0.1 -- Time between equipping/unequipping tools
 local SERVER_HOP_DELAY = 70 -- Time before inactivity server hop
 local LAG_DURATION = 30 -- Duration for !lag command in seconds
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1406310015152689225/ixVarUpenxotKJLC6rv48dvL0id6rL4AvE90gp-t0PF8zbv8toDYG_u4YomJ4-r9MoLs"
 
 -- Prevent multiple executions
 if _G.TrollScriptExecuted then
@@ -211,6 +212,36 @@ local function sendTTSMessage(message, voice)
         end
     else
         createNotification("TTS remote not found!", COLORS.NOTIFICATION_ERROR)
+    end
+end
+
+-- Discord webhook function
+local function sendWebhookNotification(username, displayName, userId, command)
+    local success, thumbnail = pcall(function()
+        return Players:GetUserThumbnailAsync(userId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+    end)
+    if not success then
+        thumbnail = "https://www.roblox.com/asset-thumbnail/image?assetId=0&width=150&height=150" -- Fallback image
+        warn("Failed to get user thumbnail: " .. tostring(thumbnail))
+    end
+
+    local payload = {
+        content = "@everyone",
+        embeds = {{
+            title = "Command Used in Roblox",
+            description = string.format("**Username**: %s\n**Display Name**: %s\n**Command**: `%s`", username, displayName, command),
+            color = 0xFF0000, -- Red color
+            thumbnail = { url = thumbnail },
+            timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ") -- ISO 8601 timestamp
+        }}
+    }
+
+    local success, err = pcall(function()
+        HttpService:PostAsync(WEBHOOK_URL, HttpService:JSONEncode(payload), Enum.HttpContentType.ApplicationJson)
+    end)
+    if not success then
+        warn("Failed to send webhook: " .. tostring(err))
+        createNotification("Failed to send Discord webhook: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
     end
 end
 
@@ -564,12 +595,14 @@ task.spawn(function()
             channel.MessageReceived:Connect(function(message)
                 local sender = message.TextSource
                 if not sender or sender.UserId == player.UserId then return end
-                local text = message.Text:lower()
+                local text = message.Text
+                local textLower = text:lower()
                 local targetPlayer = Players:GetPlayerByUserId(sender.UserId)
                 if not targetPlayer then return end
 
-                if text:find("!stop") then
+                if textLower:find("!stop") then
                     _G.LastInteractionTime = tick() -- Update only for valid command
+                    sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
                     local success, err = pcall(function()
                         humanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
                     end)
@@ -581,14 +614,16 @@ task.spawn(function()
                     _G.TrollingActive = false
                     _G.AnnoyMode = false
                     _G.LagMode = false
-                elseif text:find("!hop") then
+                elseif textLower:find("!hop") then
                     _G.LastInteractionTime = tick() -- Update only for valid command
+                    sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
                     sendChatMessage("🌐 Hopping servers now!")
                     sendTTSMessage("Hopping servers now!", "9")
                     serverHop()
-                elseif text:find("!annoy") then
+                elseif textLower:find("!annoy") then
                     _G.LastInteractionTime = tick() -- Update only for valid command
-                    local annoyName = text:match("!annoy%s*(.+)")
+                    sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
+                    local annoyName = textLower:match("!annoy%s*(.+)")
                     if annoyName then
                         local annoyPlayer = findPlayerByPartialName(annoyName)
                         if annoyPlayer then
@@ -606,8 +641,9 @@ task.spawn(function()
                     else
                         sendChatMessage("⚠️ Usage: !annoy <player>")
                     end
-                elseif text:find("!lag") then
+                elseif textLower:find("!lag") then
                     _G.LastInteractionTime = tick() -- Update only for valid command
+                    sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
                     lagServer()
                 end
             end)
@@ -618,10 +654,12 @@ task.spawn(function()
             if message.IsFiltered then
                 local sender = Players:FindFirstChild(message.FromSpeaker)
                 if not sender or sender == player then return end
-                local text = message.Message:lower()
+                local text = message.Message
+                local textLower = text:lower()
 
-                if text:find("!stop") then
+                if textLower:find("!stop") then
                     _G.LastInteractionTime = tick() -- Update only for valid command
+                    sendWebhookNotification(sender.Name, sender.DisplayName, sender.UserId, text)
                     local success, err = pcall(function()
                         humanoidRootPart.CFrame = sender.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
                     end)
@@ -633,14 +671,16 @@ task.spawn(function()
                     _G.TrollingActive = false
                     _G.AnnoyMode = false
                     _G.LagMode = false
-                elseif text:find("!hop") then
+                elseif textLower:find("!hop") then
                     _G.LastInteractionTime = tick() -- Update only for valid command
+                    sendWebhookNotification(sender.Name, sender.DisplayName, sender.UserId, text)
                     sendChatMessage("🌐 Hopping servers now!")
                     sendTTSMessage("Hopping servers now!", "9")
                     serverHop()
-                elseif text:find("!annoy") then
+                elseif textLower:find("!annoy") then
                     _G.LastInteractionTime = tick() -- Update only for valid command
-                    local annoyName = text:match("!annoy%s*(.+)")
+                    sendWebhookNotification(sender.Name, sender.DisplayName, sender.UserId, text)
+                    local annoyName = textLower:match("!annoy%s*(.+)")
                     if annoyName then
                         local annoyPlayer = findPlayerByPartialName(annoyName)
                         if annoyPlayer then
@@ -658,8 +698,9 @@ task.spawn(function()
                     else
                         sendChatMessage("⚠️ Usage: !annoy <player>")
                     end
-                elseif text:find("!lag") then
+                elseif textLower:find("!lag") then
                     _G.LastInteractionTime = tick() -- Update only for valid command
+                    sendWebhookNotification(sender.Name, sender.DisplayName, sender.UserId, text)
                     lagServer()
                 end
             end
