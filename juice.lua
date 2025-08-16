@@ -1,6 +1,5 @@
---!nolint BuiltinGlobalWrite
---!optimize 2
---!native
+-- Troll script for Roblox: Handles !stop, !hop, !annoy, and !lag commands.
+-- Commands announced once on start, no spectating functionality.
 
 -- Configuration
 local TELEPORT_DELAY = 0.1 -- Time between teleports to each player
@@ -712,7 +711,7 @@ player.OnTeleport:Connect(function(state)
                 queueTeleport(scriptContent)
             else
                 error("Empty or invalid script content")
-            end)
+            end
         end)
         if success then
             createNotification("Script queued for teleport!", COLORS.NOTIFICATION_SUCCESS)
