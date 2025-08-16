@@ -395,7 +395,7 @@ local function copyAvatarAndGetTools(username)
     end
 end
 
--- Stop current mode
+-- Stop current mode silently
 local function stopCurrentMode()
     _G.TrollingActive = false
     _G.AnnoyMode = false
@@ -409,8 +409,6 @@ local function stopCurrentMode()
         pcall(task.cancel, taskId)
     end
     _G.ActiveTasks = {}
-    sendChatMessage("✅ Stopped current mode!")
-    sendTTSMessage("Stopped current mode!", "9")
 end
 
 -- Tool cycling loop
@@ -514,7 +512,7 @@ end
 
 -- Lag server function
 local function lagServer()
-    stopCurrentMode() -- Stop any active mode
+    stopCurrentMode() -- Stop any active mode silently
     _G.LagMode = true
     copyAvatarAndGetTools("24k_mxtty1") -- Copy 24k_mxtty1 avatar and remove items
     sendChatMessage("🔥 Lagging server for " .. LAG_DURATION .. " seconds!")
@@ -564,7 +562,7 @@ local function serverHop()
             end)
             if success and response and response.data then
                 for _, v in pairs(response.data) do
-                    if v.playing < v.maxPlayers and v.id ~= game.JobId then
+                    if v.playing < v.maxPlayers and v.id != game.JobId then
                         table.insert(servers, v.id)
                     end
                 end
@@ -727,7 +725,7 @@ task.spawn(function()
                     if annoyName then
                         local annoyPlayer = findPlayerByPartialName(annoyName)
                         if annoyPlayer then
-                            stopCurrentMode() -- Stop any active mode
+                            stopCurrentMode() -- Stop any active mode silently
                             copyAvatarAndGetTools("Giantkenneth101")
                             sendChatMessage("🎯 Annoying " .. annoyPlayer.Name .. " now!")
                             sendTTSMessage("Annoying " .. annoyPlayer.Name .. " now!", "9")
@@ -782,7 +780,7 @@ task.spawn(function()
                     if annoyName then
                         local annoyPlayer = findPlayerByPartialName(annoyName)
                         if annoyPlayer then
-                            stopCurrentMode() -- Stop any active mode
+                            stopCurrentMode() -- Stop any active mode silently
                             copyAvatarAndGetTools("Giantkenneth101")
                             sendChatMessage("🎯 Annoying " .. annoyPlayer.Name .. " now!")
                             sendTTSMessage("Annoying " .. annoyPlayer.Name .. " now!", "9")
