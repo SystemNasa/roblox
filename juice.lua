@@ -12,7 +12,7 @@ local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew
 local TOOL_CYCLE_DELAY = 0.1
 
 -- Edit SERVER_HOP_DELAY to change the time (in seconds) before server hopping
-local SERVER_HOP_DELAY = 40
+local SERVER_HOP_DELAY = 70
 
 -- Prevent multiple executions
 if _G.TrollScriptExecuted then
