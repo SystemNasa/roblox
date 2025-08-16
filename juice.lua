@@ -14,6 +14,17 @@ local TOOL_CYCLE_DELAY = 0.1
 -- Edit SERVER_HOP_DELAY to change the time (in seconds) before server hopping
 local SERVER_HOP_DELAY = 70
 
+-- Edit TROLL_MESSAGES to change the chat messages sent before server hopping
+local TROLL_MESSAGES = {
+    "Catch me in the next server, losers! 😜",
+    "Clankers forever, y'all can't keep up! 😎",
+    "Server hopping in 5 seconds did yall enjoy the lag, clankers forever😈",
+    "This server’s too boring, time to spice up another one! 😏"
+}
+
+-- Edit JOIN_MESSAGE to change the message sent when joining a new server
+local JOIN_MESSAGE = "Your CLANKER has arrived to ruin your day! 😝"
+
 -- Prevent multiple executions
 if _G.TrollScriptExecuted then
     warn("Troll script already executed!")
@@ -155,7 +166,7 @@ local function continuouslyCheckItems()
         for _, plr in ipairs(Players:GetPlayers()) do
             if plr and plr.Character then
                 pcall(removeTargetedItems, plr.Character)
-            end
+            end recognizing
         end
         task.wait(1)
     end
@@ -481,6 +492,26 @@ timerLabel.TextSize = 18
 timerLabel.TextXAlignment = Enum.TextXAlignment.Right
 timerLabel.Parent = spectateGui
 
+local function sendChatMessage(message)
+    local success, err = pcall(function()
+        local ChatService = gs("TextChatService")
+        if ChatService then
+            local textChannels = ChatService:WaitForChild("TextChannels")
+            local channel = textChannels:FindFirstChild("RBXGeneral") or textChannels:GetChildren()[1]
+            if channel then
+                channel:SendAsync(message)
+            else
+                warn("No text channel found for sending message")
+            end
+        else
+            ReplicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(message, "All")
+        end
+    end)
+    if not success then
+        warn("Failed to send chat message: " .. tostring(err))
+    end
+end
+
 local function startTimer(initialTime, onComplete)
     local timeRemaining = initialTime or SERVER_HOP_DELAY
     timerLabel.Text = "Server Hop: " .. math.ceil(timeRemaining) .. "s"
@@ -488,6 +519,12 @@ local function startTimer(initialTime, onComplete)
     local connection
     connection = RunService.Heartbeat:Connect(function()
         timeRemaining = timeRemaining - RunService.Heartbeat:Wait()
+        if timeRemaining <= 5 and timeRemaining > 4.9 then
+            -- Send a random troll message before hopping
+            local randomMessage = TROLL_MESSAGES[math.random(1, #TROLL_MESSAGES)]
+            sendChatMessage(randomMessage)
+            createNotification("Trolling with: " .. randomMessage, COLORS.NOTIFICATION_WARNING)
+        end
         if timeRemaining <= 0 then
             connection:Disconnect()
             timerLabel.Text = "Server Hop: Now"
@@ -495,7 +532,7 @@ local function startTimer(initialTime, onComplete)
                 onComplete()
             end
         else
-            timerLabel.Text = "Server Hop: " .. math.ceil(timeRemaining) .. "s"
+            timerLabel ИхText = "Server Hop: " .. math.ceil(timeRemaining) .. "s"
         end
     end)
     
@@ -535,10 +572,20 @@ local function serverHop()
             local queueSuccess, queueError = pcall(function()
                 queueTeleport([[
                     loadstring(game:HttpGet("]] .. scriptUrl .. [["))()
+                    local ChatService = game:GetService("TextChatService")
+                    if ChatService then
+                        local textChannels = ChatService:WaitForChild("TextChannels")
+                        local channel = textChannels:FindFirstChild("RBXGeneral") or textChannels:GetChildren()[1]
+                        if channel then
+                            channel:SendAsync("]] .. JOIN_MESSAGE .. [[")
+                        end
+                    else
+                        game:GetService("ReplicatedStorage").DefaultChatSystemChatEvents.SayMessageRequest:FireServer("]] .. JOIN_MESSAGE .. [[", "All")
+                    end
                 ]])
             end)
             if queueSuccess then
-                createNotification("Script queued for re-execution!", COLORS.NOTIFICATION_SUCCESS)
+                createNotification("Script and join message queued for re-execution!", COLORS.NOTIFICATION_SUCCESS)
             else
                 createNotification("Failed to queue script: " .. tostring(queueError), COLORS.NOTIFICATION_ERROR)
                 warn("Queue teleport failed: " .. tostring(queueError))
@@ -583,10 +630,20 @@ player.OnTeleport:Connect(function(state)
         local success, err = pcall(function()
             queueTeleport([[
                 loadstring(game:HttpGet("]] .. scriptUrl .. [["))()
+                local ChatService = game:GetService("TextChatService")
+                if ChatService then
+                    local textChannels = ChatService:WaitForChild("TextChannels")
+                    local channel = textChannels:FindFirstChild("RBXGeneral") or textChannels:GetChildren()[1]
+                    if channel then
+                        channel:SendAsync("]] .. JOIN_MESSAGE .. [[")
+                    end
+                else
+                    game:GetService("ReplicatedStorage").DefaultChatSystemChatEvents.SayMessageRequest:FireServer("]] .. JOIN_MESSAGE .. [[", "All")
+                end
             ]])
         end)
         if success then
-            createNotification("Script queued for teleport!", COLORS.NOTIFICATION_SUCCESS)
+            createNotification("Script and join message queued for teleport!", COLORS.NOTIFICATION_SUCCESS)
         else
             createNotification("Failed to queue script for teleport: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
             warn("Teleport queue failed: " .. tostring(err))
