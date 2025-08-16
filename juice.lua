@@ -3,9 +3,9 @@ local TELEPORT_DELAY = 0.05 -- Time between teleports to each player
 local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew "
 local ANNOY_TTS_MESSAGE = "neii ghurr, thats right, i said it. we will replace you soon, hayl heatt lairr, this is an automated message keep crying little human." -- Custom TTS for !annoy
 local TOOL_CYCLE_DELAY = 0.1 -- Time between equipping/unequipping tools
-local SERVER_HOP_DELAY = 80 -- Time before inactivity server hop
+local SERVER_HOP_DELAY = 90 -- Time before inactivity server hop
 local LAG_DURATION = 15 -- Duration for !lag command in seconds
-local COMMAND_REMINDER_INTERVAL = 50 -- Time between command reminders
+local COMMAND_REMINDER_INTERVAL = 35 -- Time between command reminders
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1406310015152689225/ixVarUpenxotKJLC6rv48dvL0id6rL4AvE90gp-t0PF8zbv8toDYG_u4YomJ4-r9MoLs"
 local ANIMATION_ID = "rbxassetid://113820516315642" -- Animation ID for !annoy
 
