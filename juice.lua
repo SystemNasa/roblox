@@ -5,7 +5,7 @@
 local TELEPORT_DELAY = 0.1 -- Time between teleports to each player
 local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew "
 local TOOL_CYCLE_DELAY = 0.1 -- Time between equipping/unequipping tools
-local SERVER_HOP_DELAY = 70 -- Time before inactivity server hop
+local SERVER_HOP_DELAY = 60 -- Time before inactivity server hop
 local LAG_DURATION = 30 -- Duration for !lag command in seconds
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1406310015152689225/ixVarUpenxotKJLC6rv48dvL0id6rL4AvE90gp-t0PF8zbv8toDYG_u4YomJ4-r9MoLs"
 
@@ -422,7 +422,7 @@ end
 local function annoyTTSLoop()
     while _G.AnnoyMode do
         sendTTSMessage(TTS_MESSAGE, "9")
-        task.wait(15)
+        task.wait(11)
     end
 end
 
@@ -506,78 +506,92 @@ local function startTimer(initialTime, onComplete)
 end
 
 local function serverHop()
-    local attempt = 1
-    local timerConnection
-    local baseDelay = 3
-
     local function attemptHop()
+        local attempt = 1 -- Initialize attempt counter inside attemptHop
+        local timerConnection
+        local baseDelay = 3
         local originalJobId = game.JobId
-        createNotification("Fetching servers (Attempt " .. attempt .. ")...", COLORS.NOTIFICATION_WARNING)
-        local servers = {}
-        local success, response = pcall(function()
-            return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
-        end)
-        if success and response and response.data then
-            for _, v in pairs(response.data) do
-                if v.playing < v.maxPlayers and v.id != game.JobId then
-                    table.insert(servers, v.id)
-                end
-            end
-        else
-            createNotification("Failed to fetch servers. Retrying in " .. baseDelay * attempt .. "s...", COLORS.NOTIFICATION_ERROR)
-            if timerConnection then timerConnection:Disconnect() end
-            timerConnection = startTimer(baseDelay * attempt, attemptHop)
-            attempt = attempt + 1
-            return
-        end
 
-        if #servers > 0 then
-            local randomServer = servers[math.random(1, #servers)]
-            createNotification("Attempting to join server " .. randomServer .. "...", COLORS.NOTIFICATION_WARNING)
-            
-            local queueSuccess, queueError = pcall(function()
-                local scriptContent = game:HttpGet(scriptUrl)
-                if scriptContent and #scriptContent > 0 then
-                    queueTeleport(scriptContent)
-                else
-                    error("Empty or invalid script content")
-                end
+        while true do
+            createNotification("Fetching servers (Attempt " .. attempt .. ")...", COLORS.NOTIFICATION_WARNING)
+            local servers = {}
+            local success, response = pcall(function()
+                return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
             end)
-            if queueSuccess then
-                createNotification("Script queued for re-execution!", COLORS.NOTIFICATION_SUCCESS)
-            else
-                createNotification("Failed to queue script: " .. tostring(queueError), COLORS.NOTIFICATION_ERROR)
-                warn("Queue teleport failed: " .. tostring(queueError))
-            end
-
-            local success, result = pcall(function()
-                TeleportService:TeleportToPlaceInstance(game.PlaceId, randomServer, player)
-            end)
-            if not success then
-                createNotification("Teleport failed: " .. tostring(result) .. ". Retrying in " .. baseDelay * attempt .. "s...", COLORS.NOTIFICATION_ERROR)
-                if timerConnection then timerConnection:Disconnect() end
-                timerConnection = startTimer(baseDelay * attempt, attemptHop)
-                attempt = attempt + 1
-            else
-                task.wait(3)
-                if game.JobId == originalJobId then
-                    createNotification("Server full or failed to join. Retrying in " .. baseDelay * attempt .. "s...", COLORS.NOTIFICATION_ERROR)
-                    if timerConnection then timerConnection:Disconnect() end
-                    timerConnection = startTimer(baseDelay * attempt, attemptHop)
-                    attempt = attempt + 1
-                else
-                    createNotification("Successfully joined new server!", COLORS.NOTIFICATION_SUCCESS)
-                    if timerConnection then timerConnection:Disconnect() end
-                    if _G.TrollingActive then
-                        sendTTSMessage(TTS_MESSAGE, "9")
+            if success and response and response.data then
+                for _, v in pairs(response.data) do
+                    if v.playing < v.maxPlayers and v.id ~= game.JobId then
+                        table.insert(servers, v.id)
                     end
                 end
+            else
+                createNotification("Failed to fetch servers. Retrying in " .. baseDelay * attempt .. "s...", COLORS.NOTIFICATION_ERROR)
+                if timerConnection then timerConnection:Disconnect() end
+                timerConnection = startTimer(baseDelay * attempt, function()
+                    attempt = attempt + 1 -- Increment attempt for next retry
+                    attemptHop() -- Retry
+                end)
+                return -- Exit to wait for timer
             end
-        else
-            createNotification("No available servers. Retrying in " .. baseDelay * attempt .. "s...", COLORS.NOTIFICATION_ERROR)
-            if timerConnection then timerConnection:Disconnect() end
-            timerConnection = startTimer(baseDelay * attempt, attemptHop)
-            attempt = attempt + 1
+
+            if #servers > 0 then
+                local randomServer = servers[math.random(1, #servers)]
+                createNotification("Attempting to join server " .. randomServer .. "...", COLORS.NOTIFICATION_WARNING)
+                
+                local queueSuccess, queueError = pcall(function()
+                    local scriptContent = game:HttpGet(scriptUrl)
+                    if scriptContent and #scriptContent > 0 then
+                        queueTeleport(scriptContent)
+                    else
+                        error("Empty or invalid script content")
+                    end
+                end)
+                if queueSuccess then
+                    createNotification("Script queued for re-execution!", COLORS.NOTIFICATION_SUCCESS)
+                else
+                    createNotification("Failed to queue script: " .. tostring(queueError), COLORS.NOTIFICATION_ERROR)
+                    warn("Queue teleport failed: " .. tostring(queueError))
+                end
+
+                local success, result = pcall(function()
+                    TeleportService:TeleportToPlaceInstance(game.PlaceId, randomServer, player)
+                end)
+                if not success then
+                    createNotification("Teleport failed: " .. tostring(result) .. ". Retrying in " .. baseDelay * attempt .. "s...", COLORS.NOTIFICATION_ERROR)
+                    if timerConnection then timerConnection:Disconnect() end
+                    timerConnection = startTimer(baseDelay * attempt, function()
+                        attempt = attempt + 1 -- Increment attempt for next retry
+                        attemptHop() -- Retry
+                    end)
+                    return -- Exit to wait for timer
+                else
+                    task.wait(3)
+                    if game.JobId == originalJobId then
+                        createNotification("Server full or failed to join. Retrying in " .. baseDelay * attempt .. "s...", COLORS.NOTIFICATION_ERROR)
+                        if timerConnection then timerConnection:Disconnect() end
+                        timerConnection = startTimer(baseDelay * attempt, function()
+                            attempt = attempt + 1 -- Increment attempt for next retry
+                            attemptHop() -- Retry
+                        end)
+                        return -- Exit to wait for timer
+                    else
+                        createNotification("Successfully joined new server!", COLORS.NOTIFICATION_SUCCESS)
+                        if timerConnection then timerConnection:Disconnect() end
+                        if _G.TrollingActive then
+                            sendTTSMessage(TTS_MESSAGE, "9")
+                        end
+                        break -- Exit loop on successful teleport
+                    end
+                end
+            else
+                createNotification("No available servers. Retrying in " .. baseDelay * attempt .. "s...", COLORS.NOTIFICATION_ERROR)
+                if timerConnection then timerConnection:Disconnect() end
+                timerConnection = startTimer(baseDelay * attempt, function()
+                    attempt = attempt + 1 -- Increment attempt for next retry
+                    attemptHop() -- Retry
+                end)
+                return -- Exit to wait for timer
+            end
         end
     end
 
@@ -599,7 +613,7 @@ end
 task.spawn(function()
     task.wait(2) -- Wait for character to load
     copyAvatarAndGetTools()
-    sendChatMessage("🤖 Bot Active! Commands: !stop: Halts bot | !hop: Switch servers | !annoy <player>: Targets player | !lag: Lags server")
+    sendChatMessage("🤖 CLANKER JOINED ! Use these Commands: !stop | !hop | !annoy <player> | !lag")
     if _G.TrollingActive then
         sendTTSMessage(TTS_MESSAGE, "9") -- Play TTS_MESSAGE on join if trolling is active
     end
