@@ -7,6 +7,7 @@ local TELEPORT_DELAY = 0.1 -- Time between teleports to each player
 local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew "
 local TOOL_CYCLE_DELAY = 0.1 -- Time between equipping/unequipping tools
 local SERVER_HOP_DELAY = 70 -- Time before inactivity server hop
+local LAG_DURATION = 30 -- Duration for !lag command in seconds
 
 -- Prevent multiple executions
 if _G.TrollScriptExecuted then
@@ -18,6 +19,7 @@ _G.TrollScriptExecuted = true
 -- Global flags
 _G.TrollingActive = true
 _G.AnnoyMode = false
+_G.LagMode = false
 _G.AnnoyTarget = nil
 _G.LastInteractionTime = tick()
 
@@ -42,7 +44,7 @@ local function randstr()
 end
 
 local GUI_ID = randstr()
-local scriptUrl = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/juice.lua" -- Replace with your script's raw GitHub URL
+local scriptUrl = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/juice.lua" -- Ensure this URL is correct
 
 -- Executor compatibility
 local queueTeleport = (syn and syn.queue_on_teleport) or
@@ -74,8 +76,8 @@ local HttpService = define(gs("HttpService"))
 local TeleportService = define(gs("TeleportService"))
 local TextChatService = define(gs("TextChatService"))
 local player = define(Players.LocalPlayer)
-local TTS = ReplicatedStorage:WaitForChild("TTS")
-local proximityPrompt = Workspace.Map.RoomExtra.Model.Activate.ProximityPrompt
+local TTS = ReplicatedStorage and ReplicatedStorage:FindFirstChild("TTS")
+local proximityPrompt = Workspace and Workspace:FindFirstChild("Map") and Workspace.Map:FindFirstChild("RoomExtra") and Workspace.Map.RoomExtra:FindFirstChild("Model") and Workspace.Map.RoomExtra.Model:FindFirstChild("Activate") and Workspace.Map.RoomExtra.Model.Activate:FindFirstChild("ProximityPrompt")
 
 -- Colors for UI
 local COLORS = {
@@ -97,6 +99,13 @@ local character = player.Character or player.CharacterAdded:Wait()
 local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
 local humanoid = character:WaitForChild("Humanoid")
 
+-- Handle character respawn
+player.CharacterAdded:Connect(function(newChar)
+    character = newChar
+    humanoidRootPart = newChar:WaitForChild("HumanoidRootPart")
+    humanoid = newChar:WaitForChild("Humanoid")
+end)
+
 -- Disable seats
 for _, obj in ipairs(Workspace:GetDescendants()) do
     if obj:IsA("Seat") or obj:IsA("VehicleSeat") then
@@ -106,12 +115,16 @@ end
 humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
 
 -- Activate proximity prompt
-local promptPos = proximityPrompt.Parent.Position
-humanoidRootPart.CFrame = CFrame.new(promptPos + Vector3.new(2, 0, 0))
-task.wait(0.5)
-proximityPrompt:InputHoldBegin()
-task.wait(0.1)
-proximityPrompt:InputHoldEnd()
+if proximityPrompt then
+    local promptPos = proximityPrompt.Parent.Position
+    humanoidRootPart.CFrame = CFrame.new(promptPos + Vector3.new(2, 0, 0))
+    task.wait(0.5)
+    proximityPrompt:InputHoldBegin()
+    task.wait(0.1)
+    proximityPrompt:InputHoldEnd()
+else
+    createNotification("ProximityPrompt not found!", COLORS.NOTIFICATION_ERROR)
+end
 
 -- Item removal
 local targetItemNames = {"aura", "Fluffy Satin Gloves Black", "fuzzy"}
@@ -167,6 +180,18 @@ end
 task.spawn(continuouslyCheckItems)
 
 -- Notification UI
+local notifyContainer = Instance.new("Frame")
+notifyContainer.Size = UDim2.new(0, 200, 0, 300)
+notifyContainer.Position = UDim2.new(1, -210, 1, -310)
+notifyContainer.BackgroundTransparency = 1
+notifyContainer.Parent = gethui and gethui() or game.CoreGui
+
+local notifyLayout = Instance.new("UIListLayout")
+notifyLayout.SortOrder = Enum.SortOrder.LayoutOrder
+notifyLayout.Padding = UDim.new(0, 5)
+notifyLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+notifyLayout.Parent = notifyContainer
+
 local function createNotification(text, color)
     local notifyFrame = Instance.new("Frame")
     notifyFrame.Size = UDim2.new(0, 200, 0, 50)
@@ -251,7 +276,7 @@ end
 
 -- Tool cycling loop
 local function toolLoop()
-    while _G.TrollingActive or _G.AnnoyMode do
+    while _G.TrollingActive or _G.AnnoyMode or _G.LagMode do
         local backpack = player.Backpack
         local character = player.Character
         local humanoid = character and character:FindFirstChild("Humanoid")
@@ -296,9 +321,96 @@ end
 -- TTS loop for annoy mode
 local function annoyTTSLoop()
     while _G.AnnoyMode do
-        TTS:FireServer(TTS_MESSAGE, "9")
+        if TTS then
+            local success, err = pcall(function()
+                TTS:FireServer(TTS_MESSAGE, "9")
+            end)
+            if not success then
+                createNotification("TTS failed in annoy mode: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+            end
+        end
         task.wait(15)
     end
+end
+
+-- Lag server function
+local function lagServer()
+    if _G.LagMode or _G.TrollingActive or _G.AnnoyMode then
+        sendChatMessage("⚠️ Cannot lag server while trolling, annoying, or lagging!")
+        createNotification("Cannot lag: Another mode is active", COLORS.NOTIFICATION_ERROR)
+        return
+    end
+    _G.LagMode = true
+    sendChatMessage("🔥 Lagging server for " .. LAG_DURATION .. " seconds!")
+    createNotification("Lagging server for " .. LAG_DURATION .. " seconds", COLORS.NOTIFICATION_WARNING)
+
+    if TTS then
+        local success, err = pcall(function()
+            TTS:FireServer("Lagging server for " .. LAG_DURATION .. " seconds!", "9")
+        end)
+        if not success then
+            createNotification("TTS failed: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+        end
+    else
+        createNotification("TTS remote not found!", COLORS.NOTIFICATION_ERROR)
+    end
+
+    local startTime = tick()
+    task.spawn(function()
+        while _G.LagMode and tick() - startTime < LAG_DURATION do
+            -- Refresh character references
+            local character = player.Character
+            local humanoid = character and character:FindFirstChild("Humanoid")
+            local humanoidRootPart = character and character:FindFirstChild("HumanoidRootPart")
+            if not character or not humanoid or not humanoidRootPart then
+                createNotification("Character not loaded, skipping lag cycle", COLORS.NOTIFICATION_ERROR)
+                task.wait(0.1)
+                continue
+            end
+
+            local success, err = pcall(function()
+                for _, other in ipairs(Players:GetPlayers()) do
+                    if other ~= player and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
+                        humanoidRootPart.CFrame = CFrame.new(other.Character.HumanoidRootPart.Position + Vector3.new(2, 0, 0))
+                    end
+                end
+            end)
+            if not success then
+                createNotification("Teleport failed in lag: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+            end
+            task.wait(TELEPORT_DELAY)
+
+            success, err = pcall(function()
+                local backpack = player.Backpack
+                if humanoid and backpack then
+                    for _, tool in pairs(backpack:GetChildren()) do
+                        if tool:IsA("Tool") then
+                            humanoid:EquipTool(tool)
+                            task.wait(TOOL_CYCLE_DELAY)
+                            humanoid:UnequipTools()
+                            task.wait(TOOL_CYCLE_DELAY)
+                        end
+                    end
+                end
+            end)
+            if not success then
+                createNotification("Tool cycle failed in lag: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+            end
+
+            if TTS then
+                success, err = pcall(function()
+                    TTS:FireServer(TTS_MESSAGE, "9")
+                end)
+                if not success then
+                    createNotification("TTS failed in lag: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+                end
+            end
+            task.wait(0.1)
+        end
+        _G.LagMode = false
+        sendChatMessage("✅ Stopped lagging server!")
+        createNotification("Stopped lagging server", COLORS.NOTIFICATION_SUCCESS)
+    end)
 end
 
 -- Initialize loops
@@ -308,188 +420,6 @@ task.spawn(function()
     task.spawn(toolLoop)
 end)
 task.spawn(teleportLoop)
-
--- Spectate GUI
-local notifyContainer = Instance.new("Frame")
-notifyContainer.Size = UDim2.new(0, 200, 0, 300)
-notifyContainer.Position = UDim2.new(1, -210, 1, -310)
-notifyContainer.BackgroundTransparency = 1
-notifyContainer.Parent = spectateGui
-
-local notifyLayout = Instance.new("UIListLayout")
-notifyLayout.SortOrder = Enum.SortOrder.LayoutOrder
-notifyLayout.Padding = UDim.new(0, 5)
-notifyLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
-notifyLayout.Parent = notifyContainer
-
-local spectateGui = Instance.new("ScreenGui")
-spectateGui.Name = GUI_ID
-spectateGui.Parent = gethui and gethui() or game.CoreGui
-spectateGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-spectateGui.ResetOnSpawn = false
-
-local spectateFrame = Instance.new("Frame")
-spectateFrame.Name = "SpectateFrame"
-spectateFrame.Parent = spectateGui
-spectateFrame.BackgroundColor3 = COLORS.BACKGROUND
-spectateFrame.BackgroundTransparency = 1
-spectateFrame.BorderSizePixel = 0
-spectateFrame.Position = UDim2.new(0, 0, 0.8, 0)
-spectateFrame.Size = UDim2.new(1, 0, 0.2, 0)
-
-local leftBtn = Instance.new("TextButton")
-leftBtn.Name = "Left"
-leftBtn.Parent = spectateFrame
-leftBtn.BackgroundColor3 = COLORS.BUTTON
-leftBtn.BackgroundTransparency = 0.25
-leftBtn.BorderSizePixel = 0
-leftBtn.Position = UDim2.new(0.183150187, 0, 0.238433674, 0)
-leftBtn.Size = UDim2.new(0.0688644722, 0, 0.514322877, 0)
-leftBtn.Font = Enum.Font.FredokaOne
-leftBtn.Text = "<"
-leftBtn.TextColor3 = COLORS.TEXT_SECONDARY
-leftBtn.TextScaled = true
-
-local rightBtn = Instance.new("TextButton")
-rightBtn.Name = "Right"
-rightBtn.Parent = spectateFrame
-rightBtn.BackgroundColor3 = COLORS.BUTTON
-rightBtn.BackgroundTransparency = 0.25
-rightBtn.BorderSizePixel = 0
-rightBtn.Position = UDim2.new(0.747985363, 0, 0.238433674, 0)
-rightBtn.Size = UDim2.new(0.0688644722, 0, 0.514322877, 0)
-rightBtn.Font = Enum.Font.FredokaOne
-rightBtn.Text = ">"
-rightBtn.TextColor3 = COLORS.TEXT_SECONDARY
-rightBtn.TextScaled = true
-
-local playerDisplay = Instance.new("TextLabel")
-playerDisplay.Name = "PlayerDisplay"
-playerDisplay.Parent = spectateFrame
-playerDisplay.BackgroundTransparency = 1
-playerDisplay.Position = UDim2.new(0.252014756, 0, 0.238433674, 0)
-playerDisplay.Size = UDim2.new(0.495970696, 0, 0.514322877, 0)
-playerDisplay.Font = Enum.Font.FredokaOne
-playerDisplay.Text = "No Players"
-playerDisplay.TextColor3 = COLORS.TEXT_PRIMARY
-playerDisplay.TextScaled = true
-
-local playerIndex = Instance.new("NumberValue")
-playerIndex.Name = "PlayerIndex"
-playerIndex.Parent = spectateFrame
-playerIndex.Value = 1
-
-local stroke1 = Instance.new("UIStroke")
-stroke1.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-stroke1.Thickness = 5
-stroke1.Color = COLORS.STROKE
-stroke1.Parent = leftBtn
-
-local stroke2 = Instance.new("UIStroke")
-stroke2.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-stroke2.Thickness = 5
-stroke2.Color = COLORS.STROKE
-stroke2.Parent = rightBtn
-
-local stroke3 = Instance.new("UIStroke")
-stroke3.ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual
-stroke3.Thickness = 5
-stroke3.Color = COLORS.STROKE
-stroke3.Parent = playerDisplay
-
-local allPlayers = {}
-local spectateTarget = nil
-local spectating = true
-local cam = Workspace.CurrentCamera
-
-local function updatePlayers(leavingPlayer)
-    allPlayers = {}
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr ~= player then
-            table.insert(allPlayers, plr)
-            createNotification(plr.Name .. " joined", COLORS.NOTIFICATION_SUCCESS)
-        end
-    end
-    if #allPlayers > 0 then
-        if leavingPlayer and leavingPlayer == spectateTarget then
-            createNotification(leavingPlayer.Name .. " left", COLORS.NOTIFICATION_ERROR)
-            playerIndex.Value = math.clamp(playerIndex.Value, 1, #allPlayers)
-            spectateTarget = allPlayers[playerIndex.Value]
-        else
-            local newIndex = table.find(allPlayers, spectateTarget) or 1
-            playerIndex.Value = math.clamp(newIndex, 1, #allPlayers)
-            spectateTarget = allPlayers[playerIndex.Value]
-        end
-        playerDisplay.Text = spectateTarget and spectateTarget.Name or "No Players"
-    else
-        playerIndex.Value = 1
-        spectateTarget = nil
-        playerDisplay.Text = "No Players"
-        spectating = false
-        cam.CameraSubject = player.Character and player.Character:FindFirstChild("Humanoid") or nil
-    end
-end
-updatePlayers()
-
-Players.PlayerAdded:Connect(function(plr)
-    updatePlayers()
-    if #allPlayers > 0 and not spectateTarget then
-        spectating = true
-        playerIndex.Value = 1
-        spectateTarget = allPlayers[1]
-        playerDisplay.Text = spectateTarget.Name
-    end
-end)
-
-Players.PlayerRemoving:Connect(function(plr)
-    updatePlayers(plr)
-end)
-
-local function onPress(skip)
-    if #allPlayers == 0 then
-        playerDisplay.Text = "No Players"
-        spectating = false
-        return
-    end
-    local newIndex = playerIndex.Value + skip
-    if newIndex > #allPlayers then
-        newIndex = 1
-    elseif newIndex < 1 then
-        newIndex = #allPlayers
-    end
-    playerIndex.Value = newIndex
-    spectateTarget = allPlayers[playerIndex.Value]
-    spectating = true
-    playerDisplay.Text = spectateTarget and spectateTarget.Name or "No Players"
-end
-
-leftBtn.MouseButton1Click:Connect(function() onPress(-1) end)
-rightBtn.MouseButton1Click:Connect(function() onPress(1) end)
-
-RunService.RenderStepped:Connect(function()
-    if spectating and #allPlayers > 0 and spectateTarget and spectateTarget.Character then
-        local targetHumanoid = spectateTarget.Character:FindFirstChild("Humanoid")
-        if targetHumanoid then
-            cam.CameraSubject = targetHumanoid
-            playerDisplay.Text = spectateTarget.Name
-        else
-            playerDisplay.Text = "No Character"
-        end
-    else
-        spectating = false
-        playerDisplay.Text = "No Players"
-        cam.CameraSubject = player.Character and player.Character:FindFirstChild("Humanoid") or nil
-    end
-end)
-
-local function updateStrokeThickness()
-    local screenSize = Workspace.CurrentCamera.ViewportSize
-    local scaleFactor = screenSize.X / 1920
-    stroke1.Thickness = 5 * scaleFactor * 1.25
-    stroke2.Thickness = 5 * scaleFactor * 1.25
-    stroke3.Thickness = 5 * scaleFactor * 1.25
-end
-RunService.RenderStepped:Connect(updateStrokeThickness)
 
 -- Chat functions
 local function sendChatMessage(message)
@@ -508,10 +438,11 @@ local function sendChatMessage(message)
     end)
     if not success then
         warn("Failed to send chat message: " .. tostring(err))
+        createNotification("Chat message failed: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
     end
 end
 
--- Server hop functions (moved before chat listener)
+-- Server hop functions
 local function startTimer(initialTime, onComplete)
     local timeRemaining = initialTime or SERVER_HOP_DELAY
     local connection
@@ -528,12 +459,6 @@ local function startTimer(initialTime, onComplete)
 end
 
 local function serverHop()
-    if not serverHop then
-        createNotification("Error: serverHop function is nil!", COLORS.NOTIFICATION_ERROR)
-        warn("serverHop function is nil!")
-        return
-    end
-
     local attempt = 1
     local timerConnection
     local baseDelay = 3
@@ -564,9 +489,12 @@ local function serverHop()
             createNotification("Attempting to join server " .. randomServer .. "...", COLORS.NOTIFICATION_WARNING)
             
             local queueSuccess, queueError = pcall(function()
-                queueTeleport([[
-                    loadstring(game:HttpGet("]] .. scriptUrl .. [["))()
-                ]])
+                local scriptContent = game:HttpGet(scriptUrl)
+                if scriptContent and #scriptContent > 0 then
+                    queueTeleport(scriptContent)
+                else
+                    error("Empty or invalid script content")
+                end
             end)
             if queueSuccess then
                 createNotification("Script queued for re-execution!", COLORS.NOTIFICATION_SUCCESS)
@@ -609,30 +537,32 @@ end
 -- Announce commands on start
 task.spawn(function()
     task.wait(2) -- Wait for character to load
-    sendChatMessage("I'm here to troll! Commands: !stop to stop me, !hop to hop servers, !annoy <player> to annoy a specific player (partial name ok).")
+    sendChatMessage("🤖 Bot Active! Commands: !stop: Halts bot | !hop: Switch servers | !annoy <player>: Targets player | !lag: Lags server")
 end)
 
 -- Reminder loop
 task.spawn(function()
-    while _G.TrollingActive or _G.AnnoyMode do
+    while _G.TrollingActive or _G.AnnoyMode or _G.LagMode do
         task.wait(30)
-        sendChatMessage("Reminder: Commands are !stop, !hop, !annoy <player>.")
+        sendChatMessage("📢 Commands: !stop: Halts bot | !hop: Switch servers | !annoy <player>: Targets player | !lag: Lags server")
     end
 end)
 
 -- Inactivity check loop
 task.spawn(function()
-    while _G.TrollingActive or _G.AnnoyMode do
+    while _G.TrollingActive or _G.AnnoyMode or _G.LagMode do
         task.wait(1)
         if tick() - _G.LastInteractionTime >= SERVER_HOP_DELAY then
-            sendChatMessage("No interactions for 70 seconds, hopping servers!")
-            TTS:FireServer("No interactions for 70 seconds, hopping servers!", "9")
-            if serverHop then
-                serverHop()
-            else
-                createNotification("Error: serverHop function is nil in inactivity loop!", COLORS.NOTIFICATION_ERROR)
-                warn("serverHop function is nil in inactivity loop!")
+            sendChatMessage("⏰ No interactions for 70 seconds, hopping servers!")
+            if TTS then
+                local success, err = pcall(function()
+                    TTS:FireServer("No interactions for 70 seconds, hopping servers!", "9")
+                end)
+                if not success then
+                    createNotification("TTS failed in inactivity check: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+                end
             end
+            serverHop()
         end
     end
 end)
@@ -655,45 +585,63 @@ task.spawn(function()
         if channel then
             channel.MessageReceived:Connect(function(message)
                 local sender = message.TextSource
-                if not sender or sender.UserId == player.UserId then return end -- Ignore bot's own messages
+                if not sender or sender.UserId == player.UserId then return end
                 local text = message.Text:lower()
                 local targetPlayer = Players:GetPlayerByUserId(sender.UserId)
                 if not targetPlayer then return end
 
-                _G.LastInteractionTime = tick() -- Reset interaction timer
+                _G.LastInteractionTime = tick()
 
                 if text:find("!stop") then
-                    humanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
-                    sendChatMessage("I have successfully stopped for " .. targetPlayer.Name .. "!")
-                    TTS:FireServer("I have successfully stopped for " .. targetPlayer.Name .. "!", "9")
+                    local success, err = pcall(function()
+                        humanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
+                    end)
+                    if not success then
+                        createNotification("Teleport failed in stop: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+                    end
+                    sendChatMessage("✅ Stopped for " .. targetPlayer.Name .. "!")
+                    if TTS then
+                        local ttsSuccess, ttsErr = pcall(function()
+                            TTS:FireServer("Stopped for " .. targetPlayer.Name .. "!", "9")
+                        end)
+                        if not ttsSuccess then
+                            createNotification("TTS failed in stop: " .. tostring(ttsErr), COLORS.NOTIFICATION_ERROR)
+                        end
+                    end
                     _G.TrollingActive = false
                     _G.AnnoyMode = false
+                    _G.LagMode = false
                 elseif text:find("!hop") then
-                    sendChatMessage("Hopping servers now!")
-                    TTS:FireServer("Hopping servers now!", "9")
-                    if serverHop then
-                        serverHop()
-                    else
-                        createNotification("Error: serverHop function is nil!", COLORS.NOTIFICATION_ERROR)
-                        warn("serverHop function is nil!")
+                    sendChatMessage("🌐 Hopping servers now!")
+                    if TTS then
+                        local success, err = pcall(function()
+                            TTS:FireServer("Hopping servers now!", "9")
+                        end)
+                        if not success then
+                            createNotification("TTS failed in hop: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+                        end
                     end
+                    serverHop()
                 elseif text:find("!annoy") then
                     local annoyName = text:match("!annoy%s*(.+)")
                     if annoyName then
                         local annoyPlayer = findPlayerByPartialName(annoyName)
                         if annoyPlayer then
-                            sendChatMessage("Annoying " .. annoyPlayer.Name .. " now!")
+                            sendChatMessage("🎯 Annoying " .. annoyPlayer.Name .. " now!")
                             _G.TrollingActive = false
                             _G.AnnoyMode = true
+                            _G.LagMode = false
                             _G.AnnoyTarget = annoyPlayer
                             task.spawn(annoyTeleportLoop)
                             task.spawn(annoyTTSLoop)
                         else
-                            sendChatMessage("No player found matching '" .. annoyName .. "'.")
+                            sendChatMessage("❌ No player found matching '" .. annoyName .. "'.")
                         end
                     else
-                        sendChatMessage("Usage: !annoy <player>")
+                        sendChatMessage("⚠️ Usage: !annoy <player>")
                     end
+                elseif text:find("!lag") then
+                    lagServer()
                 end
             end)
         end
@@ -702,43 +650,61 @@ task.spawn(function()
         chatEvents.OnMessageDoneFiltering:Connect(function(message)
             if message.IsFiltered then
                 local sender = Players:FindFirstChild(message.FromSpeaker)
-                if not sender or sender == player then return end -- Ignore bot's own messages
+                if not sender or sender == player then return end
                 local text = message.Message:lower()
 
-                _G.LastInteractionTime = tick() -- Reset interaction timer
+                _G.LastInteractionTime = tick()
 
                 if text:find("!stop") then
-                    humanoidRootPart.CFrame = sender.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
-                    sendChatMessage("I have successfully stopped for " .. sender.Name .. "!")
-                    TTS:FireServer("I have successfully stopped for " .. sender.Name .. "!", "9")
+                    local success, err = pcall(function()
+                        humanoidRootPart.CFrame = sender.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
+                    end)
+                    if not success then
+                        createNotification("Teleport failed in stop: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+                    end
+                    sendChatMessage("✅ Stopped for " .. sender.Name .. "!")
+                    if TTS then
+                        local ttsSuccess, ttsErr = pcall(function()
+                            TTS:FireServer("Stopped for " .. sender.Name .. "!", "9")
+                        end)
+                        if not ttsSuccess then
+                            createNotification("TTS failed in stop: " .. tostring(ttsErr), COLORS.NOTIFICATION_ERROR)
+                        end
+                    end
                     _G.TrollingActive = false
                     _G.AnnoyMode = false
+                    _G.LagMode = false
                 elseif text:find("!hop") then
-                    sendChatMessage("Hopping servers now!")
-                    TTS:FireServer("Hopping servers now!", "9")
-                    if serverHop then
-                        serverHop()
-                    else
-                        createNotification("Error: serverHop function is nil!", COLORS.NOTIFICATION_ERROR)
-                        warn("serverHop function is nil!")
+                    sendChatMessage("🌐 Hopping servers now!")
+                    if TTS then
+                        local success, err = pcall(function()
+                            TTS:FireServer("Hopping servers now!", "9")
+                        end)
+                        if not success then
+                            createNotification("TTS failed in hop: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+                        end
                     end
+                    serverHop()
                 elseif text:find("!annoy") then
                     local annoyName = text:match("!annoy%s*(.+)")
                     if annoyName then
                         local annoyPlayer = findPlayerByPartialName(annoyName)
                         if annoyPlayer then
-                            sendChatMessage("Annoying " .. annoyPlayer.Name .. " now!")
+                            sendChatMessage("🎯 Annoying " .. annoyPlayer.Name .. " now!")
                             _G.TrollingActive = false
                             _G.AnnoyMode = true
+                            _G.LagMode = false
                             _G.AnnoyTarget = annoyPlayer
                             task.spawn(annoyTeleportLoop)
                             task.spawn(annoyTTSLoop)
                         else
-                            sendChatMessage("No player found matching '" .. annoyName .. "'.")
+                            sendChatMessage("❌ No player found matching '" .. annoyName .. "'.")
                         end
                     else
-                        sendChatMessage("Usage: !annoy <player>")
+                        sendChatMessage("⚠️ Usage: !annoy <player>")
                     end
+                elseif text:find("!lag") then
+                    lagServer()
                 end
             end
         end)
@@ -749,9 +715,12 @@ end)
 player.OnTeleport:Connect(function(state)
     if state == Enum.TeleportState.Started then
         local success, err = pcall(function()
-            queueTeleport([[
-                loadstring(game:HttpGet("]] .. scriptUrl .. [["))()
-            ]])
+            local scriptContent = game:HttpGet(scriptUrl)
+            if scriptContent and #scriptContent > 0 then
+                queueTeleport(scriptContent)
+            else
+                error("Empty or invalid script content")
+            end
         end)
         if success then
             createNotification("Script queued for teleport!", COLORS.NOTIFICATION_SUCCESS)
