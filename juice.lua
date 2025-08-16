@@ -1,5 +1,3 @@
--- Troll script for Roblox: Handles !stop, !hop, !annoy, and !lag commands.
-
 -- Configuration
 local TELEPORT_DELAY = 0.05 -- Time between teleports to each player
 local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew "
@@ -25,6 +23,7 @@ _G.LagMode = false
 _G.AnnoyTarget = nil
 _G.LastInteractionTime = tick()
 _G.AnimationTrack = nil -- To store the animation track
+_G.ActiveTasks = {} -- To store active tasks for cancellation
 
 -- Utility functions
 local function randomHex(len)
@@ -336,7 +335,7 @@ local function removeTargetedItems(character)
 end
 
 local function continuouslyCheckItems()
-    while _G.TrollingActive do
+    while true do
         for _, plr in ipairs(Players:GetPlayers()) do
             if plr and plr.Character then
                 pcall(removeTargetedItems, plr.Character)
@@ -396,100 +395,126 @@ local function copyAvatarAndGetTools(username)
     end
 end
 
--- Tool cycling loop
-local function toolLoop()
-    while _G.TrollingActive or _G.AnnoyMode or _G.LagMode do
-        local backpack = player.Backpack
-        local character = player.Character
-        local humanoid = character and character:FindFirstChild("Humanoid")
-        if humanoid and backpack then
-            for _, tool in pairs(backpack:GetChildren()) do
-                if tool:IsA("Tool") then
-                    humanoid:EquipTool(tool)
-                    task.wait(TOOL_CYCLE_DELAY)
-                    humanoid:UnequipTools()
-                    task.wait(TOOL_CYCLE_DELAY)
-                end
-            end
-        else
-            task.wait(0.1)
-        end
-    end
-end
-
--- Teleport loop for trolling
-local function teleportLoop()
-    while _G.TrollingActive do
-        local players = Players:GetPlayers()
-        for _, other in ipairs(players) do
-            if other ~= player and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
-                humanoidRootPart.CFrame = CFrame.new(other.Character.HumanoidRootPart.Position + Vector3.new(2, 0, 0))
-                task.wait(TELEPORT_DELAY)
-            end
-        end
-        sendTTSMessage(TTS_MESSAGE, "9")
-    end
-end
-
--- Teleport loop for annoy mode with animation and facing
-local function annoyTeleportLoop()
-    -- Load animation when annoy mode starts
-    local success, err = pcall(function()
-        local animation = Instance.new("Animation")
-        animation.AnimationId = ANIMATION_ID
-        _G.AnimationTrack = humanoid:FindFirstChildOfClass("Animator"):LoadAnimation(animation)
-        _G.AnimationTrack:Play()
-    end)
-    if not success then
-        createNotification("Failed to load animation: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
-    end
-
-    while _G.AnnoyMode do
-        if _G.AnnoyTarget and _G.AnnoyTarget.Character and _G.AnnoyTarget.Character:FindFirstChild("HumanoidRootPart") then
-            local targetPos = _G.AnnoyTarget.Character.HumanoidRootPart.Position
-            local myPos = humanoidRootPart.Position
-            -- Position 2 studs away and face the target
-            local newPos = targetPos + (myPos - targetPos).Unit * 2
-            local success, err = pcall(function()
-                humanoidRootPart.CFrame = CFrame.lookAt(newPos, targetPos)
-            end)
-            if not success then
-                createNotification("Teleport failed in annoy: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
-            end
-            -- Ensure animation is playing
-            if _G.AnimationTrack and _G.AnimationTrack.IsPlaying == false then
-                _G.AnimationTrack:Play()
-            end
-        else
-            -- Stop animation if target is invalid
-            if _G.AnimationTrack then
-                _G.AnimationTrack:Stop()
-            end
-        end
-        task.wait(TELEPORT_DELAY)
-    end
-    -- Stop animation when annoy mode ends
+-- Stop current mode
+local function stopCurrentMode()
+    _G.TrollingActive = false
+    _G.AnnoyMode = false
+    _G.LagMode = false
+    _G.AnnoyTarget = nil
     if _G.AnimationTrack then
         _G.AnimationTrack:Stop()
         _G.AnimationTrack = nil
     end
+    for _, taskId in ipairs(_G.ActiveTasks) do
+        pcall(task.cancel, taskId)
+    end
+    _G.ActiveTasks = {}
+    sendChatMessage("✅ Stopped current mode!")
+    sendTTSMessage("Stopped current mode!", "9")
+end
+
+-- Tool cycling loop
+local function toolLoop()
+    local taskId = task.spawn(function()
+        while _G.TrollingActive or _G.AnnoyMode or _G.LagMode do
+            local backpack = player.Backpack
+            local character = player.Character
+            local humanoid = character and character:FindFirstChild("Humanoid")
+            if humanoid and backpack then
+                for _, tool in pairs(backpack:GetChildren()) do
+                    if tool:IsA("Tool") then
+                        humanoid:EquipTool(tool)
+                        task.wait(TOOL_CYCLE_DELAY)
+                        humanoid:UnequipTools()
+                        task.wait(TOOL_CYCLE_DELAY)
+                    end
+                end
+            else
+                task.wait(0.1)
+            end
+        end
+    end)
+    table.insert(_G.ActiveTasks, taskId)
+end
+
+-- Teleport loop for trolling
+local function teleportLoop()
+    local taskId = task.spawn(function()
+        while _G.TrollingActive do
+            local players = Players:GetPlayers()
+            for _, other in ipairs(players) do
+                if other ~= player and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
+                    humanoidRootPart.CFrame = CFrame.new(other.Character.HumanoidRootPart.Position + Vector3.new(2, 0, 0))
+                    task.wait(TELEPORT_DELAY)
+                end
+            end
+            sendTTSMessage(TTS_MESSAGE, "9")
+        end
+    end)
+    table.insert(_G.ActiveTasks, taskId)
+end
+
+-- Teleport loop for annoy mode with animation and facing
+local function annoyTeleportLoop()
+    local taskId = task.spawn(function()
+        -- Load animation when annoy mode starts
+        local success, err = pcall(function()
+            local animation = Instance.new("Animation")
+            animation.AnimationId = ANIMATION_ID
+            _G.AnimationTrack = humanoid:FindFirstChildOfClass("Animator"):LoadAnimation(animation)
+            _G.AnimationTrack:Play()
+        end)
+        if not success then
+            createNotification("Failed to load animation: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+        end
+
+        while _G.AnnoyMode do
+            if _G.AnnoyTarget and _G.AnnoyTarget.Character and _G.AnnoyTarget.Character:FindFirstChild("HumanoidRootPart") then
+                local targetPos = _G.AnnoyTarget.Character.HumanoidRootPart.Position
+                local myPos = humanoidRootPart.Position
+                -- Position 2 studs away and face the target
+                local newPos = targetPos + (myPos - targetPos).Unit * 2
+                local success, err = pcall(function()
+                    humanoidRootPart.CFrame = CFrame.lookAt(newPos, targetPos)
+                end)
+                if not success then
+                    createNotification("Teleport failed in annoy: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+                end
+                -- Ensure animation is playing
+                if _G.AnimationTrack and _G.AnimationTrack.IsPlaying == false then
+                    _G.AnimationTrack:Play()
+                end
+            else
+                -- Stop animation if target is invalid
+                if _G.AnimationTrack then
+                    _G.AnimationTrack:Stop()
+                end
+            end
+            task.wait(TELEPORT_DELAY)
+        end
+        -- Stop animation when annoy mode ends
+        if _G.AnimationTrack then
+            _G.AnimationTrack:Stop()
+            _G.AnimationTrack = nil
+        end
+    end)
+    table.insert(_G.ActiveTasks, taskId)
 end
 
 -- TTS loop for annoy mode
 local function annoyTTSLoop()
-    while _G.AnnoyMode do
-        sendTTSMessage(ANNOY_TTS_MESSAGE, "9") -- Use custom TTS message
-        task.wait(11)
-    end
+    local taskId = task.spawn(function()
+        while _G.AnnoyMode do
+            sendTTSMessage(ANNOY_TTS_MESSAGE, "9")
+            task.wait(11)
+        end
+    end)
+    table.insert(_G.ActiveTasks, taskId)
 end
 
 -- Lag server function
 local function lagServer()
-    if _G.LagMode or _G.TrollingActive or _G.AnnoyMode then
-        sendChatMessage("⚠️ Cannot lag while doing something, say !stop first.")
-        createNotification("Cannot lag: Another mode is active", COLORS.NOTIFICATION_ERROR)
-        return
-    end
+    stopCurrentMode() -- Stop any active mode
     _G.LagMode = true
     copyAvatarAndGetTools("24k_mxtty1") -- Copy 24k_mxtty1 avatar and remove items
     sendChatMessage("🔥 Lagging server for " .. LAG_DURATION .. " seconds!")
@@ -501,16 +526,11 @@ local function lagServer()
     local toolTask = task.spawn(toolLoop)
 
     -- Run for LAG_DURATION, then stop
-    task.spawn(function()
+    local lagTask = task.spawn(function()
         task.wait(LAG_DURATION)
-        _G.LagMode = false
-        _G.TrollingActive = false
-        task.cancel(teleportTask)
-        task.cancel(toolTask)
-        sendChatMessage("✅ Stopped lagging server!")
-        createNotification("Stopped lagging server", COLORS.NOTIFICATION_SUCCESS)
-        sendTTSMessage("Stopped lagging server!", "9")
+        stopCurrentMode()
     end)
+    table.insert(_G.ActiveTasks, lagTask)
 end
 
 -- Server hop functions
@@ -661,8 +681,8 @@ task.spawn(function()
     while true do
         task.wait(1)
         if tick() - _G.LastInteractionTime >= SERVER_HOP_DELAY then
-            sendChatMessage("⏰ No interactions for 70 seconds, hopping servers!")
-            sendTTSMessage("No interactions for 70 seconds, hopping servers!", "9")
+            sendChatMessage("⏰ No interactions for " .. SERVER_HOP_DELAY .. " seconds, hopping servers!")
+            sendTTSMessage("No interactions for " .. SERVER_HOP_DELAY .. " seconds, hopping servers!", "9")
             serverHop()
             break
         end
@@ -691,15 +711,9 @@ task.spawn(function()
                     if not success then
                         createNotification("Teleport failed in stop: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
                     end
+                    stopCurrentMode()
                     sendChatMessage("✅ Stopped for " .. targetPlayer.Name .. "!")
                     sendTTSMessage("Stopped for " .. targetPlayer.Name .. "!", "9")
-                    _G.TrollingActive = false
-                    _G.AnnoyMode = false
-                    _G.LagMode = false
-                    if _G.AnimationTrack then
-                        _G.AnimationTrack:Stop()
-                        _G.AnimationTrack = nil
-                    end
                 elseif textLower:find("!hop") then
                     _G.LastInteractionTime = tick()
                     sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
@@ -713,12 +727,11 @@ task.spawn(function()
                     if annoyName then
                         local annoyPlayer = findPlayerByPartialName(annoyName)
                         if annoyPlayer then
+                            stopCurrentMode() -- Stop any active mode
                             copyAvatarAndGetTools("Giantkenneth101")
                             sendChatMessage("🎯 Annoying " .. annoyPlayer.Name .. " now!")
                             sendTTSMessage("Annoying " .. annoyPlayer.Name .. " now!", "9")
-                            _G.TrollingActive = false
                             _G.AnnoyMode = true
-                            _G.LagMode = false
                             _G.AnnoyTarget = annoyPlayer
                             task.spawn(annoyTeleportLoop)
                             task.spawn(annoyTTSLoop)
@@ -753,15 +766,9 @@ task.spawn(function()
                     if not success then
                         createNotification("Teleport failed in stop: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
                     end
+                    stopCurrentMode()
                     sendChatMessage("✅ Stopped for " .. sender.Name .. "!")
                     sendTTSMessage("Stopped for " .. sender.Name .. "!", "9")
-                    _G.TrollingActive = false
-                    _G.AnnoyMode = false
-                    _G.LagMode = false
-                    if _G.AnimationTrack then
-                        _G.AnimationTrack:Stop()
-                        _G.AnimationTrack = nil
-                    end
                 elseif textLower:find("!hop") then
                     _G.LastInteractionTime = tick()
                     sendWebhookNotification(sender.Name, sender.DisplayName, sender.UserId, text)
@@ -775,12 +782,11 @@ task.spawn(function()
                     if annoyName then
                         local annoyPlayer = findPlayerByPartialName(annoyName)
                         if annoyPlayer then
+                            stopCurrentMode() -- Stop any active mode
                             copyAvatarAndGetTools("Giantkenneth101")
                             sendChatMessage("🎯 Annoying " .. annoyPlayer.Name .. " now!")
                             sendTTSMessage("Annoying " .. annoyPlayer.Name .. " now!", "9")
-                            _G.TrollingActive = false
                             _G.AnnoyMode = true
-                            _G.LagMode = false
                             _G.AnnoyTarget = annoyPlayer
                             task.spawn(annoyTeleportLoop)
                             task.spawn(annoyTTSLoop)
