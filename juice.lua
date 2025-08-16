@@ -7,6 +7,7 @@ local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew
 local TOOL_CYCLE_DELAY = 0.1 -- Time between equipping/unequipping tools
 local SERVER_HOP_DELAY = 70 -- Time before inactivity server hop
 local LAG_DURATION = 30 -- Duration for !lag command in seconds
+local TTS_ON_JOIN_MESSAGE = "Bot has joined the game! Ready to troll!" -- New TTS message on join
 
 -- Prevent multiple executions
 if _G.TrollScriptExecuted then
@@ -200,6 +201,20 @@ local function sendChatMessage(message)
     end
 end
 
+-- TTS function
+local function sendTTSMessage(message, voice)
+    if TTS then
+        local success, err = pcall(function()
+            TTS:FireServer(message, voice or "9")
+        end)
+        if not success then
+            createNotification("TTS failed: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+        end
+    else
+        createNotification("TTS remote not found!", COLORS.NOTIFICATION_ERROR)
+    end
+end
+
 -- Item removal
 local targetItemNames = {"aura", "Fluffy Satin Gloves Black", "fuzzy"}
 local function hasItemInName(accessory)
@@ -263,7 +278,7 @@ local function copyAvatarAndGetTools()
         else
             error("EventInputModify not found")
         end
-    end) -- Removed the extra ) here
+    end)
     if not success then
         createNotification("Failed to copy avatar: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
     end
@@ -293,6 +308,7 @@ local function copyAvatarAndGetTools()
         task.wait(0.1)
     end
 end
+
 -- Tool cycling loop
 local function toolLoop()
     while _G.TrollingActive or _G.AnnoyMode or _G.LagMode do
@@ -324,6 +340,8 @@ local function teleportLoop()
                 task.wait(TELEPORT_DELAY)
             end
         end
+        -- Send TTS during trolling
+        sendTTSMessage(TTS_MESSAGE, "9")
     end
 end
 
@@ -340,14 +358,7 @@ end
 -- TTS loop for annoy mode
 local function annoyTTSLoop()
     while _G.AnnoyMode do
-        if TTS then
-            local success, err = pcall(function()
-                TTS:FireServer(TTS_MESSAGE, "9")
-            end)
-            if not success then
-                createNotification("TTS failed in annoy mode: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
-            end
-        end
+        sendTTSMessage(TTS_MESSAGE, "9")
         task.wait(15)
     end
 end
@@ -362,22 +373,11 @@ local function lagServer()
     _G.LagMode = true
     sendChatMessage("🔥 Lagging server for " .. LAG_DURATION .. " seconds!")
     createNotification("Lagging server for " .. LAG_DURATION .. " seconds", COLORS.NOTIFICATION_WARNING)
-
-    if TTS then
-        local success, err = pcall(function()
-            TTS:FireServer("Lagging server for " .. LAG_DURATION .. " seconds!", "9")
-        end)
-        if not success then
-            createNotification("TTS failed: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
-        end
-    else
-        createNotification("TTS remote not found!", COLORS.NOTIFICATION_ERROR)
-    end
+    sendTTSMessage("Lagging server for " .. LAG_DURATION .. " seconds!", "9")
 
     local startTime = tick()
     task.spawn(function()
         while _G.LagMode and tick() - startTime < LAG_DURATION do
-            -- Refresh character references
             local character = player.Character
             local humanoid = character and character:FindFirstChild("Humanoid")
             local humanoidRootPart = character and character:FindFirstChild("HumanoidRootPart")
@@ -416,19 +416,13 @@ local function lagServer()
                 createNotification("Tool cycle failed in lag: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
             end
 
-            if TTS then
-                success, err = pcall(function()
-                    TTS:FireServer(TTS_MESSAGE, "9")
-                end)
-                if not success then
-                    createNotification("TTS failed in lag: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
-                end
-            end
+            sendTTSMessage(TTS_MESSAGE, "9")
             task.wait(0.1)
         end
         _G.LagMode = false
         sendChatMessage("✅ Stopped lagging server!")
         createNotification("Stopped lagging server", COLORS.NOTIFICATION_SUCCESS)
+        sendTTSMessage("Stopped lagging server!", "9")
     end)
 end
 
@@ -526,7 +520,7 @@ end
 
 -- Find player by partial name
 local function findPlayerByPartialName(namePart)
-    namePart = namePart:lower():gsub("%s+", "") -- Remove spaces for matching
+    namePart = namePart:lower():gsub("%s+", "")
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= player and (plr.Name:lower():find(namePart) or plr.DisplayName:lower():gsub("%s+", ""):find(namePart)) then
             return plr
@@ -535,35 +529,26 @@ local function findPlayerByPartialName(namePart)
     return nil
 end
 
--- Initialize loops
-task.spawn(function()
-    copyAvatarAndGetTools()
-    task.wait(1)
-    task.spawn(toolLoop)
-end)
-task.spawn(teleportLoop)
-
--- Announce commands on start (only once)
+-- Initialize loops and TTS on join
 task.spawn(function()
     task.wait(2) -- Wait for character to load
+    copyAvatarAndGetTools()
     sendChatMessage("🤖 Bot Active! Commands: !stop: Halts bot | !hop: Switch servers | !annoy <player>: Targets player | !lag: Lags server")
+    sendTTSMessage(TTS_ON_JOIN_MESSAGE, "9") -- TTS on join
+    task.wait(1)
+    task.spawn(toolLoop)
+    task.spawn(teleportLoop)
 end)
 
 -- Inactivity check loop
 task.spawn(function()
-    while _G.TrollingActive or _G.AnnoyMode or _G.LagMode do
+    while true do -- Changed to always run
         task.wait(1)
         if tick() - _G.LastInteractionTime >= SERVER_HOP_DELAY then
             sendChatMessage("⏰ No interactions for 70 seconds, hopping servers!")
-            if TTS then
-                local success, err = pcall(function()
-                    TTS:FireServer("No interactions for 70 seconds, hopping servers!", "9")
-                end)
-                if not success then
-                    createNotification("TTS failed in inactivity check: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
-                end
-            end
+            sendTTSMessage("No interactions for 70 seconds, hopping servers!", "9")
             serverHop()
+            break -- Exit loop after initiating server hop
         end
     end
 end)
@@ -590,27 +575,13 @@ task.spawn(function()
                         createNotification("Teleport failed in stop: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
                     end
                     sendChatMessage("✅ Stopped for " .. targetPlayer.Name .. "!")
-                    if TTS then
-                        local ttsSuccess, ttsErr = pcall(function()
-                            TTS:FireServer("Stopped for " .. targetPlayer.Name .. "!", "9")
-                        end)
-                        if not ttsSuccess then
-                            createNotification("TTS failed in stop: " .. tostring(ttsErr), COLORS.NOTIFICATION_ERROR)
-                        end
-                    end
+                    sendTTSMessage("Stopped for " .. targetPlayer.Name .. "!", "9")
                     _G.TrollingActive = false
                     _G.AnnoyMode = false
                     _G.LagMode = false
                 elseif text:find("!hop") then
                     sendChatMessage("🌐 Hopping servers now!")
-                    if TTS then
-                        local success, err = pcall(function()
-                            TTS:FireServer("Hopping servers now!", "9")
-                        end)
-                        if not success then
-                            createNotification("TTS failed in hop: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
-                        end
-                    end
+                    sendTTSMessage("Hopping servers now!", "9")
                     serverHop()
                 elseif text:find("!annoy") then
                     local annoyName = text:match("!annoy%s*(.+)")
@@ -618,6 +589,7 @@ task.spawn(function()
                         local annoyPlayer = findPlayerByPartialName(annoyName)
                         if annoyPlayer then
                             sendChatMessage("🎯 Annoying " .. annoyPlayer.Name .. " now!")
+                            sendTTSMessage("Annoying " .. annoyPlayer.Name .. " now!", "9")
                             _G.TrollingActive = false
                             _G.AnnoyMode = true
                             _G.LagMode = false
@@ -653,27 +625,13 @@ task.spawn(function()
                         createNotification("Teleport failed in stop: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
                     end
                     sendChatMessage("✅ Stopped for " .. sender.Name .. "!")
-                    if TTS then
-                        local ttsSuccess, ttsErr = pcall(function()
-                            TTS:FireServer("Stopped for " .. sender.Name .. "!", "9")
-                        end)
-                        if not ttsSuccess then
-                            createNotification("TTS failed in stop: " .. tostring(ttsErr), COLORS.NOTIFICATION_ERROR)
-                        end
-                    end
+                    sendTTSMessage("Stopped for " .. sender.Name .. "!", "9")
                     _G.TrollingActive = false
                     _G.AnnoyMode = false
                     _G.LagMode = false
                 elseif text:find("!hop") then
                     sendChatMessage("🌐 Hopping servers now!")
-                    if TTS then
-                        local success, err = pcall(function()
-                            TTS:FireServer("Hopping servers now!", "9")
-                        end)
-                        if not success then
-                            createNotification("TTS failed in hop: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
-                        end
-                    end
+                    sendTTSMessage("Hopping servers now!", "9")
                     serverHop()
                 elseif text:find("!annoy") then
                     local annoyName = text:match("!annoy%s*(.+)")
@@ -681,6 +639,7 @@ task.spawn(function()
                         local annoyPlayer = findPlayerByPartialName(annoyName)
                         if annoyPlayer then
                             sendChatMessage("🎯 Annoying " .. annoyPlayer.Name .. " now!")
+                            sendTTSMessage("Annoying " .. annoyPlayer.Name .. " now!", "9")
                             _G.TrollingActive = false
                             _G.AnnoyMode = true
                             _G.LagMode = false
