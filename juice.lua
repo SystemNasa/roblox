@@ -1,5 +1,5 @@
 -- Troll script for Roblox: Handles !stop, !hop, !annoy, and !lag commands.
--- Sends Discord webhook notification with user details for each valid command.
+-- Sends Discord webhook notification with user details for each valid command using executor-compatible HTTP requests.
 
 -- Configuration
 local TELEPORT_DELAY = 0.1 -- Time between teleports to each player
@@ -216,32 +216,66 @@ local function sendTTSMessage(message, voice)
 end
 
 -- Discord webhook function
-local function sendWebhookNotification(username, displayName, userId, command)
-    local success, thumbnail = pcall(function()
-        return Players:GetUserThumbnailAsync(userId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150)
+local function getPlayerPfpUrl(userId)
+    local success, result = pcall(function()
+        local thumbnailApiUrl = "https://thumbnails.roblox.com/v1/users/avatar?userIds=" .. userId .. "&size=420x420&format=Png&isCircular=false"
+        return game:HttpGet(thumbnailApiUrl)
     end)
-    if not success then
-        thumbnail = "https://www.roblox.com/asset-thumbnail/image?assetId=0&width=150&height=150" -- Fallback image
-        warn("Failed to get user thumbnail: " .. tostring(thumbnail))
+    
+    if success and result then
+        local thumbnailData = HttpService:JSONDecode(result)
+        if thumbnailData and thumbnailData.data and thumbnailData.data[1] and thumbnailData.data[1].imageUrl then
+            return thumbnailData.data[1].imageUrl
+        end
     end
+    return "https://www.roblox.com/asset/?id=403652994"
+end
 
-    local payload = {
+local function sendWebhookNotification(username, displayName, userId, command)
+    local playerPfpUrl = getPlayerPfpUrl(userId)
+    local date = os.date("%m/%d/%Y")
+    local time = os.date("%X")
+    local playerLink = "https://www.roblox.com/users/" .. userId
+
+    local data = {
         content = "@everyone",
         embeds = {{
-            title = "Command Used in Roblox",
-            description = string.format("**Username**: %s\n**Display Name**: %s\n**Command**: `%s`", username, displayName, command),
-            color = 0xFF0000, -- Red color
-            thumbnail = { url = thumbnail },
-            timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ") -- ISO 8601 timestamp
+            author = {
+                name = "Command Used in Roblox",
+                url = playerLink
+            },
+            description = string.format(
+                "**Username**: %s\n**Display Name**: %s\n**Command**: `%s`",
+                username, displayName, command
+            ),
+            color = tonumber("0xFF0000"), -- Red color
+            thumbnail = { url = playerPfpUrl },
+            footer = { text = string.format("Date: %s | Time: %s", date, time) }
         }}
     }
 
-    local success, err = pcall(function()
-        HttpService:PostAsync(WEBHOOK_URL, HttpService:JSONEncode(payload), Enum.HttpContentType.ApplicationJson)
+    local headers = {["Content-Type"] = "application/json"}
+    local request = http_request or request or HttpPost or syn.request
+    if not request then
+        warn("No compatible HTTP request function found!")
+        createNotification("No compatible HTTP request function found!", COLORS.NOTIFICATION_ERROR)
+        return
+    end
+
+    local requestData = {
+        Url = WEBHOOK_URL,
+        Body = HttpService:JSONEncode(data),
+        Method = "POST",
+        Headers = headers
+    }
+
+    local success, response = pcall(function()
+        return request(requestData)
     end)
+
     if not success then
-        warn("Failed to send webhook: " .. tostring(err))
-        createNotification("Failed to send Discord webhook: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+        warn("Webhook request failed: " .. tostring(response))
+        createNotification("Failed to send Discord webhook: " .. tostring(response), COLORS.NOTIFICATION_ERROR)
     end
 end
 
@@ -485,7 +519,7 @@ local function serverHop()
         end)
         if success and response and response.data then
             for _, v in pairs(response.data) do
-                if v.playing < v.maxPlayers and v.id ~= game.JobId then
+                if v.playing < v.maxPlayers and v.id != game.JobId then
                     table.insert(servers, v.id)
                 end
             end
