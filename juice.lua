@@ -5,7 +5,7 @@
 local TELEPORT_DELAY = 0.1 -- Time between teleports to each player
 local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew "
 local TOOL_CYCLE_DELAY = 0.1 -- Time between equipping/unequipping tools
-local SERVER_HOP_DELAY = 10 -- Time before inactivity server hop
+local SERVER_HOP_DELAY = 70 -- Time before inactivity server hop
 local LAG_DURATION = 30 -- Duration for !lag command in seconds
 
 -- Prevent multiple executions
@@ -547,15 +547,11 @@ end)
 task.spawn(function()
     while true do
         task.wait(1)
-        local timeSinceInteraction = tick() - _G.LastInteractionTime
-        if timeSinceInteraction >= SERVER_HOP_DELAY then
+        if tick() - _G.LastInteractionTime >= SERVER_HOP_DELAY then
             sendChatMessage("⏰ No interactions for 70 seconds, hopping servers!")
             sendTTSMessage("No interactions for 70 seconds, hopping servers!", "9")
-            warn("Inactivity detected, initiating server hop at " .. os.date("%H:%M:%S"))
             serverHop()
             break -- Exit loop after initiating server hop
-        else
-            warn("Time since last interaction: " .. math.floor(timeSinceInteraction) .. " seconds")
         end
     end
 end)
@@ -572,10 +568,8 @@ task.spawn(function()
                 local targetPlayer = Players:GetPlayerByUserId(sender.UserId)
                 if not targetPlayer then return end
 
-                _G.LastInteractionTime = tick()
-                warn("Chat command received from " .. targetPlayer.Name .. ": " .. text)
-
                 if text:find("!stop") then
+                    _G.LastInteractionTime = tick() -- Update only for valid command
                     local success, err = pcall(function()
                         humanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
                     end)
@@ -588,10 +582,12 @@ task.spawn(function()
                     _G.AnnoyMode = false
                     _G.LagMode = false
                 elseif text:find("!hop") then
+                    _G.LastInteractionTime = tick() -- Update only for valid command
                     sendChatMessage("🌐 Hopping servers now!")
                     sendTTSMessage("Hopping servers now!", "9")
                     serverHop()
                 elseif text:find("!annoy") then
+                    _G.LastInteractionTime = tick() -- Update only for valid command
                     local annoyName = text:match("!annoy%s*(.+)")
                     if annoyName then
                         local annoyPlayer = findPlayerByPartialName(annoyName)
@@ -611,6 +607,7 @@ task.spawn(function()
                         sendChatMessage("⚠️ Usage: !annoy <player>")
                     end
                 elseif text:find("!lag") then
+                    _G.LastInteractionTime = tick() -- Update only for valid command
                     lagServer()
                 end
             end)
@@ -623,10 +620,8 @@ task.spawn(function()
                 if not sender or sender == player then return end
                 local text = message.Message:lower()
 
-                _G.LastInteractionTime = tick()
-                warn("Chat command received from " .. sender.Name .. ": " .. text)
-
                 if text:find("!stop") then
+                    _G.LastInteractionTime = tick() -- Update only for valid command
                     local success, err = pcall(function()
                         humanoidRootPart.CFrame = sender.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
                     end)
@@ -639,10 +634,12 @@ task.spawn(function()
                     _G.AnnoyMode = false
                     _G.LagMode = false
                 elseif text:find("!hop") then
+                    _G.LastInteractionTime = tick() -- Update only for valid command
                     sendChatMessage("🌐 Hopping servers now!")
                     sendTTSMessage("Hopping servers now!", "9")
                     serverHop()
                 elseif text:find("!annoy") then
+                    _G.LastInteractionTime = tick() -- Update only for valid command
                     local annoyName = text:match("!annoy%s*(.+)")
                     if annoyName then
                         local annoyPlayer = findPlayerByPartialName(annoyName)
@@ -662,6 +659,7 @@ task.spawn(function()
                         sendChatMessage("⚠️ Usage: !annoy <player>")
                     end
                 elseif text:find("!lag") then
+                    _G.LastInteractionTime = tick() -- Update only for valid command
                     lagServer()
                 end
             end
