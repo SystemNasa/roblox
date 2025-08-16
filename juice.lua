@@ -6,6 +6,7 @@
 local TELEPORT_DELAY = 0.1 -- Time between teleports to each player
 local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew "
 local TOOL_CYCLE_DELAY = 0.1 -- Time between equipping/unequipping tools
+local SERVER_HOP_DELAY = 70 -- Time before inactivity server hop
 
 -- Prevent multiple executions
 if _G.TrollScriptExecuted then
@@ -528,7 +529,7 @@ end)
 task.spawn(function()
     while _G.TrollingActive or _G.AnnoyMode do
         task.wait(1)
-        if tick() - _G.LastInteractionTime >= 70 then
+        if tick() - _G.LastInteractionTime >= SERVER_HOP_DELAY then
             sendChatMessage("No interactions for 70 seconds, hopping servers!")
             TTS:FireServer("No interactions for 70 seconds, hopping servers!", "9")
             serverHop()
@@ -634,19 +635,19 @@ task.spawn(function()
     end
 end)
 
--- Simplified server hop function
+-- Server hop function (restored from working version)
 local function serverHop()
-    local maxAttempts = 5
-    local baseDelay = 3
     local attempt = 1
+    local timerConnection
+    local baseDelay = 3
 
-    while attempt <= maxAttempts do
+    local function attemptHop()
+        local originalJobId = game.JobId
         createNotification("Fetching servers (Attempt " .. attempt .. ")...", COLORS.NOTIFICATION_WARNING)
         local servers = {}
         local success, response = pcall(function()
             return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
         end)
-
         if success and response and response.data then
             for _, v in pairs(response.data) do
                 if v.playing < v.maxPlayers and v.id ~= game.JobId then
@@ -654,16 +655,17 @@ local function serverHop()
                 end
             end
         else
-            createNotification("Failed to fetch servers. Retrying in " .. baseDelay .. "s...", COLORS.NOTIFICATION_ERROR)
-            task.wait(baseDelay)
+            createNotification("Failed to fetch servers. Retrying in " .. baseDelay * attempt .. "s...", COLORS.NOTIFICATION_ERROR)
+            if timerConnection then timerConnection:Disconnect() end
+            timerConnection = startTimer(baseDelay * attempt, attemptHop)
             attempt = attempt + 1
-            continue
+            return
         end
 
         if #servers > 0 then
             local randomServer = servers[math.random(1, #servers)]
             createNotification("Attempting to join server " .. randomServer .. "...", COLORS.NOTIFICATION_WARNING)
-
+            
             local queueSuccess, queueError = pcall(function()
                 queueTeleport([[
                     loadstring(game:HttpGet("]] .. scriptUrl .. [["))()
@@ -680,25 +682,47 @@ local function serverHop()
                 TeleportService:TeleportToPlaceInstance(game.PlaceId, randomServer, player)
             end)
             if not success then
-                createNotification("Teleport failed: " .. tostring(result) .. ". Retrying in " .. baseDelay .. "s...", COLORS.NOTIFICATION_ERROR)
-                task.wait(baseDelay)
+                createNotification("Teleport failed: " .. tostring(result) .. ". Retrying in " .. baseDelay * attempt .. "s...", COLORS.NOTIFICATION_ERROR)
+                if timerConnection then timerConnection:Disconnect() end
+                timerConnection = startTimer(baseDelay * attempt, attemptHop)
                 attempt = attempt + 1
-                continue
             else
-                createNotification("Teleport initiated!", COLORS.NOTIFICATION_SUCCESS)
-                break -- Exit loop after initiating teleport
+                task.wait(3)
+                if game.JobId == originalJobId then
+                    createNotification("Server full or failed to join. Retrying in " .. baseDelay * attempt .. "s...", COLORS.NOTIFICATION_ERROR)
+                    if timerConnection then timerConnection:Disconnect() end
+                    timerConnection = startTimer(baseDelay * attempt, attemptHop)
+                    attempt = attempt + 1
+                else
+                    createNotification("Successfully joined new server!", COLORS.NOTIFICATION_SUCCESS)
+                    if timerConnection then timerConnection:Disconnect() end
+                end
             end
         else
-            createNotification("No available servers. Retrying in " .. baseDelay .. "s...", COLORS.NOTIFICATION_ERROR)
-            task.wait(baseDelay)
+            createNotification("No available servers. Retrying in " .. baseDelay * attempt .. "s...", COLORS.NOTIFICATION_ERROR)
+            if timerConnection then timerConnection:Disconnect() end
+            timerConnection = startTimer(baseDelay * attempt, attemptHop)
             attempt = attempt + 1
-            continue
         end
     end
 
-    if attempt > maxAttempts then
-        createNotification("Max attempts reached. Could not find a server to join.", COLORS.NOTIFICATION_ERROR)
-    end
+    attemptHop()
+end
+
+-- Timer for server hop retries
+local function startTimer(initialTime, onComplete)
+    local timeRemaining = initialTime or SERVER_HOP_DELAY
+    local connection
+    connection = RunService.Heartbeat:Connect(function()
+        timeRemaining = timeRemaining - RunService.Heartbeat:Wait()
+        if timeRemaining <= 0 then
+            connection:Disconnect()
+            if onComplete then
+                onComplete()
+            end
+        end
+    end)
+    return connection
 end
 
 -- Teleport handler
