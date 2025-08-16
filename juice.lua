@@ -504,13 +504,13 @@ end
 
 -- Announce commands on start
 task.wait(2) -- Wait for character to load
-sendChatMessage("I'm here to troll! Commands: !stop to stop me, !hop to hop servers, !annoy <player> to annoy a specific player (partial name ok).")
+sendChatMessage("YOUR FAV CLANKER IS HERE! Commands: !stop to stop me, !hop to hop servers, !annoy to annoy a specific player.")
 
 -- Reminder loop
 task.spawn(function()
     while _G.TrollingActive do
         task.wait(30)
-        sendChatMessage("Reminder: Commands are !stop, !hop, !annoy <player>.")
+        sendChatMessage("YOUR FAV CLANKER IS HERE! Commands: !stop to stop me, !hop to hop servers, !annoy to annoy a specific player.")
     end
 end)
 
