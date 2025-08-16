@@ -262,8 +262,8 @@ local function copyAvatarAndGetTools()
             createNotification("Copied avatar of 24k_mxtty1", COLORS.NOTIFICATION_SUCCESS)
         else
             error("EventInputModify not found")
-        end)
-    end)
+        end
+    end) -- Removed the extra ) here
     if not success then
         createNotification("Failed to copy avatar: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
     end
@@ -285,7 +285,7 @@ local function copyAvatarAndGetTools()
                 createNotification("Acquired tool: " .. toolName, COLORS.NOTIFICATION_SUCCESS)
             else
                 error("Tool event not found")
-            end)
+            end
         end)
         if not success then
             createNotification("Failed to acquire " .. toolName .. ": " .. tostring(err), COLORS.NOTIFICATION_ERROR)
@@ -293,7 +293,6 @@ local function copyAvatarAndGetTools()
         task.wait(0.1)
     end
 end
-
 -- Tool cycling loop
 local function toolLoop()
     while _G.TrollingActive or _G.AnnoyMode or _G.LagMode do
