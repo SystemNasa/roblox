@@ -762,6 +762,7 @@ task.spawn(function()
                     sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
                     sendChatMessage("🌐 Hopping servers now!")
                     sendTTSMessage("Hopping servers now!", "9")
+                    task.wait(3)
                     serverHop()
                 elseif textLower:find("!annoy") then
                     _G.LastInteractionTime = tick()
