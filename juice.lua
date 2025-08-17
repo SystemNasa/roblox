@@ -364,6 +364,15 @@ local function stopCurrentMode()
         pcall(task.cancel, taskId)
     end
     _G.ActiveTasks = {}
+    -- Unequip all tools
+    if humanoid then
+        local success, err = pcall(function()
+            humanoid:UnequipTools()
+        end)
+        if not success then
+            warn("Failed to unequip tools: " .. tostring(err))
+        end
+    end
 end
 
 -- Tool cycling loop
