@@ -6,7 +6,6 @@ local TOOL_CYCLE_DELAY = 0.1 -- Time between equipping/unequipping tools
 local SERVER_HOP_DELAY = 90 -- Time before inactivity server hop
 local LAG_DURATION = 15 -- Duration for !lag command in seconds
 local COMMAND_REMINDER_INTERVAL = 35 -- Time between command reminders
-local COMMAND_COOLDOWN = 1 -- 1-second cooldown between commands
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1406310015152689225/ixVarUpenxotKJLC6rv48dvL0id6rL4AvE90gp-t0PF8zbv8toDYG_u4YomJ4-r9MoLs"
 local ANIMATION_ID = "rbxassetid://113820516315642" -- Animation ID for !annoy
 local FOLLOW_SPEED = 30 -- Speed for following in studs per second
@@ -24,7 +23,6 @@ _G.AnnoyMode = false
 _G.LagMode = false
 _G.AnnoyTarget = nil
 _G.LastInteractionTime = tick()
-_G.LastCommandTime = 0 -- Track time of last processed command
 _G.AnimationTrack = nil -- To store the animation track
 _G.ActiveTasks = {} -- To store active tasks for cancellation
 
@@ -671,12 +669,6 @@ end
 
 -- Command handler
 local function handleCommand(sender, text)
-    -- Check cooldown
-    if tick() - _G.LastCommandTime < COMMAND_COOLDOWN then
-        return -- Ignore command if within cooldown
-    end
-    _G.LastCommandTime = tick()
-
     local textLower = text:lower()
     local targetPlayer = Players:GetPlayerByUserId(sender.UserId) or Players:FindFirstChild(sender.Name)
     if not targetPlayer then return end
@@ -719,7 +711,7 @@ local function handleCommand(sender, text)
                 sendChatMessage("❌ No player found matching '" .. annoyName .. "'.")
             end
         else
-            sendChatMessage("⚠️ Usage: !annoy <player>")
+            sendChatMessage("⚠️ Usage: !annoy user/display doesnt need to be fully typed")
         end
     elseif textLower:find("!lag") then
         if _G.LagMode then
@@ -736,7 +728,7 @@ end
 task.spawn(function()
     task.wait(COMMAND_REMINDER_INTERVAL)
     while true do
-        sendChatMessage("🤖 CLANKER JOINED | Use these Commands, !stop | !hop | !annoy <player> | !lag")
+        sendChatMessage("🤖 CLANKER JOINED | Use these Commands, !stop | !hop | !annoy user | !lag")
         task.wait(COMMAND_REMINDER_INTERVAL)
     end
 end)
