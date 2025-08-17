@@ -775,8 +775,8 @@ local function handleCommand(sender, text)
         if not success then
             sendChatMessage("❌ Teleport failed in premium: " .. tostring(err))
         else
-            sendChatMessage("🌟 Premium users get special treatment! They prevent the server from lagging, buy my gamepass to be whitelisted !")
-            sendTTSMessage("Premium users get special treatment! They prevent the server from lagging, buy my gamepass to be whitelisted !", "9")
+            sendChatMessage("🌟 Premium users get special treatment! They prevent the server from lagging, buy my gamepass to be whitelisted!")
+            sendTTSMessage("Premium users get special treatment! They prevent the server from lagging, buy my gamepass to be whitelisted!", "9")
         end
     end
 end
@@ -806,9 +806,17 @@ task.spawn(function()
         if success then
             sendChatMessage("🌟 Hello premium user " .. premiumPlayer.Name .. ", I won't lag this server thanks to you!")
             sendTTSMessage("Hello premium user " .. premiumPlayer.Name .. ", I won't lag this server thanks to you!", "9")
+            task.wait(10) -- Wait 10 seconds before hopping
+            sendChatMessage("🌐 Leaving server due to premium user presence!")
+            sendTTSMessage("Leaving server due to premium user presence!", "9")
+            serverHop()
         else
             warn("Failed to teleport to premium user: " .. tostring(err))
             sendChatMessage("❌ Failed to teleport to premium user " .. premiumPlayer.Name .. ".")
+            task.wait(10) -- Still wait 10 seconds before hopping
+            sendChatMessage("🌐 Leaving server due to premium user presence!")
+            sendTTSMessage("Leaving server due to premium user presence!", "9")
+            serverHop()
         end
     else
         warn("No premium users found, proceeding with normal trolling.")
