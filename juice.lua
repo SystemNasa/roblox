@@ -458,7 +458,7 @@ local function annoyTeleportLoop()
         -- Make character huge by firing the remote
         success, err = pcall(function()
             local args = { [1] = "Huge" }
-            game:GetService("ReplicatedStorage"):WaitForChild("Size Preset", 9e9):FireServer(unpack(args))
+            game:GetService("ReplicatedStorage"):WaitForChild("SizePreset", 9e9):FireServer(unpack(args))
         end)
         if not success then
             sendChatMessage("❌ Failed to set character size to Huge: " .. tostring(err))
