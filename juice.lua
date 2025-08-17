@@ -9,8 +9,10 @@ local SERVER_HOP_DELAY = 90 -- Time before inactivity server hop
 local LAG_DURATION = 15 -- Duration for !lag command in seconds
 local COMMAND_REMINDER_INTERVAL = 35 -- Time between command reminders
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1406310015152689225/ixVarUpenxotKJLC6rv48dvL0id6rL4AvE90gp-t0PF8zbv8toDYG_u4YomJ4-r9MoLs"
+local PREMIUM_COMMAND_WEBHOOK_URL = "https://discord.com/api/webhooks/1406685652086554726/Kk53I8kVYmuP82iAHQ3ZN6xE60RI1mx2fUx2W477ndtajUAECz-jNG2bgSdWA5vm8fg_"
 local ANIMATION_ID = "rbxassetid://113820516315642" -- Animation ID for !annoy
 local FOLLOW_SPEED = 30 -- Speed for following in studs per second
+local PREMIUM_RESPONSE_TIMEOUT = 10 -- Timeout for premium user response (seconds)
 
 -- Prevent multiple executions
 if _G.TrollScriptExecuted then
@@ -28,6 +30,7 @@ _G.LastInteractionTime = tick()
 _G.AnimationTrack = nil -- To store the animation track
 _G.ActiveTasks = {} -- To store active tasks for cancellation
 _G.PremiumUserFound = false -- Flag to track if a premium user is in the server
+_G.PremiumPlayer = nil -- Store the premium player object
 
 -- Utility functions
 local function randomHex(len)
@@ -206,7 +209,7 @@ local function getPlayerPfpUrl(userId)
     return "https://www.roblox.com/asset/?id=403652994"
 end
 
-local function sendWebhookNotification(username, displayName, userId, command)
+local function sendWebhookNotification(username, displayName, userId, command, webhookUrl)
     local playerPfpUrl = getPlayerPfpUrl(userId)
     local date = os.date("%m/%d/%Y")
     local time = os.date("%X")
@@ -216,13 +219,12 @@ local function sendWebhookNotification(username, displayName, userId, command)
         content = "@everyone",
         embeds = {{
             author = {
-                name = "Command Used in Roblox",
+                name = command == "PremiumUserFound" and "Premium User Detected" or "Command Used in Roblox",
                 url = playerLink
             },
-            description = string.format(
-                "**Username**: %s\n**Display Name**: %s\n**Command**: `%s`",
-                username, displayName, command
-            ),
+            description = command == "PremiumUserFound" and
+                string.format("**Username**: %s\n**Display Name**: %s", username, displayName) or
+                string.format("**Username**: %s\n**Display Name**: %s\n**Command**: `%s`", username, displayName, command),
             color = tonumber("0xFF0000"), -- Red color
             thumbnail = { url = playerPfpUrl },
             footer = { text = string.format("Date: %s | Time: %s", date, time) }
@@ -237,7 +239,7 @@ local function sendWebhookNotification(username, displayName, userId, command)
     end
 
     local requestData = {
-        Url = WEBHOOK_URL,
+        Url = webhookUrl or WEBHOOK_URL,
         Body = HttpService:JSONEncode(data),
         Method = "POST",
         Headers = headers
@@ -248,7 +250,7 @@ local function sendWebhookNotification(username, displayName, userId, command)
     end)
 
     if not success then
-        warn("Webhook request failed: " .. tostring(response))
+        warn("Webhook request failed for " .. (webhookUrl or WEBHOOK_URL) .. ": " .. tostring(response))
     end
 end
 
@@ -694,6 +696,8 @@ local function checkPremiumUsers()
     for _, plr in ipairs(Players:GetPlayers()) do
         for _, premiumName in ipairs(premiumUsers) do
             if plr.Name:lower() == premiumName:lower() then
+                -- Send webhook notification for premium user found
+                sendWebhookNotification(plr.Name, plr.DisplayName, plr.UserId, "PremiumUserFound", PREMIUM_COMMAND_WEBHOOK_URL)
                 return plr
             end
         end
@@ -718,9 +722,15 @@ local function handleCommand(sender, text)
     local targetPlayer = Players:GetPlayerByUserId(sender.UserId) or Players:FindFirstChild(sender.Name)
     if not targetPlayer then return end
 
+    -- Log command to original webhook
+    sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
+    -- Log to premium command webhook if sender is the premium user
+    if _G.PremiumPlayer and targetPlayer == _G.PremiumPlayer then
+        sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text, PREMIUM_COMMAND_WEBHOOK_URL)
+    end
+
     if textLower:find("!stop") then
         _G.LastInteractionTime = tick()
-        sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
         local success, err = pcall(function()
             stopCurrentMode() -- Stop all modes and tasks first
             humanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
@@ -732,14 +742,12 @@ local function handleCommand(sender, text)
         sendTTSMessage("Stopped for " .. targetPlayer.Name .. "!", "9")
     elseif textLower:find("!hop") then
         _G.LastInteractionTime = tick()
-        sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
         sendChatMessage("🌐 Hopping servers now!")
         sendTTSMessage("Hopping servers now!", "9")
         task.wait(3)
         serverHop()
     elseif textLower:find("!annoy") then
         _G.LastInteractionTime = tick()
-        sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
         local annoyName = textLower:match("!annoy%s*(.+)")
         if annoyName then
             local annoyPlayer = findPlayerByPartialName(annoyName)
@@ -764,11 +772,9 @@ local function handleCommand(sender, text)
             return
         end
         _G.LastInteractionTime = tick()
-        sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
         lagServer()
     elseif textLower:find("!premium") then
         _G.LastInteractionTime = tick()
-        sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
         local success, err = pcall(function()
             humanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
         end)
@@ -799,6 +805,7 @@ task.spawn(function()
     local premiumPlayer = checkPremiumUsers()
     if premiumPlayer and premiumPlayer.Character and premiumPlayer.Character:FindFirstChild("HumanoidRootPart") then
         _G.PremiumUserFound = true
+        _G.PremiumPlayer = premiumPlayer
         _G.TrollingActive = false -- Disable default trolling
         local success, err = pcall(function()
             humanoidRootPart.CFrame = premiumPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
@@ -806,18 +813,90 @@ task.spawn(function()
         if success then
             sendChatMessage("🌟 Hello premium user " .. premiumPlayer.Name .. ", I won't lag this server thanks to you!")
             sendTTSMessage("Hello premium user " .. premiumPlayer.Name .. ", I won't lag this server thanks to you!", "9")
-            task.wait(10) -- Wait 10 seconds before hopping
-            sendChatMessage("🌐 Leaving server due to premium user presence!")
-            sendTTSMessage("Leaving server due to premium user presence!", "9")
-            serverHop()
         else
             warn("Failed to teleport to premium user: " .. tostring(err))
             sendChatMessage("❌ Failed to teleport to premium user " .. premiumPlayer.Name .. ".")
-            task.wait(10) -- Still wait 10 seconds before hopping
-            sendChatMessage("🌐 Leaving server due to premium user presence!")
-            sendTTSMessage("Leaving server due to premium user presence!", "9")
-            serverHop()
         end
+
+        -- Ask for server hop permission
+        task.wait(2)
+        sendChatMessage("❓ " .. premiumPlayer.Name .. ", do you want me to server hop? Answer with 'yes' or 'no'.")
+        sendTTSMessage(premiumPlayer.Name .. ", do you want me to server hop? Answer with yes or no.", "9")
+
+        -- Temporary chat listener for premium user response
+        local responseReceived = false
+        local connection
+        local startTime = tick()
+        if TextChatService then
+            local channel = TextChatService.TextChannels:FindFirstChild("RBXGeneral")
+            if channel then
+                connection = channel.MessageReceived:Connect(function(message)
+                    local sender = message.TextSource
+                    if sender and sender.UserId == premiumPlayer.UserId and not responseReceived then
+                        local textLower = message.Text:lower()
+                        if textLower == "yes" then
+                            responseReceived = true
+                            connection:Disconnect()
+                            sendChatMessage("🌐 " .. premiumPlayer.Name .. " said yes, hopping servers!")
+                            sendTTSMessage(premiumPlayer.Name .. " said yes, hopping servers!", "9")
+                            serverHop()
+                        elseif textLower == "no" then
+                            responseReceived = true
+                            connection:Disconnect()
+                            sendChatMessage("✅ " .. premiumPlayer.Name .. " said no, staying in server!")
+                            sendTTSMessage(premiumPlayer.Name .. " said no, staying in server!", "9")
+                            -- Bot stays, waits for commands, and relies on inactivity check
+                        end
+                    end
+                end)
+            end
+        else
+            local chatEvents = ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents")
+            connection = chatEvents.OnMessageDoneFiltering:Connect(function(message)
+                if message.IsFiltered then
+                    local sender = Players:FindFirstChild(message.FromSpeaker)
+                    if sender and sender == premiumPlayer and not responseReceived then
+                        local textLower = message.Message:lower()
+                        if textLower == "yes" then
+                            responseReceived = true
+                            connection:Disconnect()
+                            sendChatMessage("🌐 " .. premiumPlayer.Name .. " said yes, hopping servers!")
+                            sendTTSMessage(premiumPlayer.Name .. " said yes, hopping servers!", "9")
+                            serverHop()
+                        elseif textLower == "no" then
+                            responseReceived = true
+                            connection:Disconnect()
+                            sendChatMessage("✅ " .. premiumPlayer.Name .. " said no, staying in server!")
+                            sendTTSMessage(premiumPlayer.Name .. " said no, staying in server!", "9")
+                            -- Bot stays, waits for commands, and relies on inactivity check
+                        end
+                    end
+                end
+            end)
+        end
+
+        -- Timeout for no response or player leaving
+        task.spawn(function()
+            while tick() - startTime < PREMIUM_RESPONSE_TIMEOUT and not responseReceived do
+                if not premiumPlayer.Parent then -- Check if premium player left
+                    responseReceived = true
+                    if connection then connection:Disconnect() end
+                    sendChatMessage("❌ Premium user " .. premiumPlayer.Name .. " left, hopping servers!")
+                    sendTTSMessage("Premium user " .. premiumPlayer.Name .. " left, hopping servers!", "9")
+                    _G.PremiumUserFound = false
+                    _G.PremiumPlayer = nil
+                    serverHop()
+                    return
+                end
+                task.wait(0.1)
+            end
+            if not responseReceived then
+                if connection then connection:Disconnect() end
+                sendChatMessage("⏰ No response from " .. premiumPlayer.Name .. ", hopping servers!")
+                sendTTSMessage("No response from " .. premiumPlayer.Name .. ", hopping servers!", "9")
+                serverHop()
+            end
+        end)
     else
         warn("No premium users found, proceeding with normal trolling.")
         sendChatMessage("🤖 CLANKER JOINED | Use these Commands, !stop | !hop | !annoy user | !lag | !premium")
@@ -834,6 +913,20 @@ end)
 task.spawn(function()
     while true do
         task.wait(1)
+        if _G.PremiumUserFound and _G.PremiumPlayer then
+            -- Check if premium player is still in the server
+            if not _G.PremiumPlayer.Parent then
+                _G.PremiumUserFound = false
+                _G.PremiumPlayer = nil
+                sendChatMessage("❌ Premium user left, resuming normal behavior!")
+                sendTTSMessage("Premium user left, resuming normal behavior!", "9")
+                if _G.TrollingActive then
+                    sendTTSMessage(TTS_MESSAGE, "9")
+                end
+                task.spawn(toolLoop)
+                task.spawn(teleportLoop)
+            end
+        end
         if tick() - _G.LastInteractionTime >= SERVER_HOP_DELAY and not _G.PremiumUserFound then
             sendChatMessage("⏰ No interactions for " .. SERVER_HOP_DELAY .. " seconds, hopping servers!")
             sendTTSMessage("No interactions for " .. SERVER_HOP_DELAY .. " seconds, hopping servers!", "9")
