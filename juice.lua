@@ -31,6 +31,7 @@ _G.AnimationTrack = nil -- To store the animation track
 _G.ActiveTasks = {} -- To store active tasks for cancellation
 _G.PremiumUserFound = false -- Flag to track if a premium user is in the server
 _G.PremiumPlayer = nil -- Store the premium player object
+_G.WaitingForPremiumResponse = false -- Flag to track if waiting for premium user response
 
 -- Utility functions
 local function randomHex(len)
@@ -725,6 +726,12 @@ local function handleCommand(sender, text)
     -- Only process commands starting with "!"
     if not textLower:find("^!") then return end
 
+    -- Block commands while waiting for premium user response
+    if _G.WaitingForPremiumResponse then
+        sendChatMessage("⏳ Please wait, I'm awaiting a response from the premium user.")
+        return
+    end
+
     if textLower:find("!stop") then
         _G.LastInteractionTime = tick()
         sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
@@ -757,6 +764,7 @@ local function handleCommand(sender, text)
                 return
             end
             -- Ask premium user for permission to server hop
+            _G.WaitingForPremiumResponse = true -- Set flag before prompting
             sendChatMessage("❓ " .. _G.PremiumPlayer.Name .. ", " .. targetPlayer.Name .. " wants to server hop. Should I hop? Answer with 'yes' or 'no'.")
             sendTTSMessage(_G.PremiumPlayer.Name .. ", " .. targetPlayer.Name .. " wants to server hop. Should I hop? Answer with yes or no.", "9")
 
@@ -774,12 +782,14 @@ local function handleCommand(sender, text)
                             if textLower == "yes" then
                                 responseReceived = true
                                 connection:Disconnect()
+                                _G.WaitingForPremiumResponse = false -- Reset flag
                                 sendChatMessage("🌐 " .. _G.PremiumPlayer.Name .. " said yes, hopping servers!")
                                 sendTTSMessage(_G.PremiumPlayer.Name .. " said yes, hopping servers!", "9")
                                 serverHop()
                             elseif textLower == "no" then
                                 responseReceived = true
                                 connection:Disconnect()
+                                _G.WaitingForPremiumResponse = false -- Reset flag
                                 sendChatMessage("✅ " .. _G.PremiumPlayer.Name .. " said no, staying in server!")
                                 sendTTSMessage(_G.PremiumPlayer.Name .. " said no, staying in server!", "9")
                             end
@@ -796,12 +806,14 @@ local function handleCommand(sender, text)
                             if textLower == "yes" then
                                 responseReceived = true
                                 connection:Disconnect()
+                                _G.WaitingForPremiumResponse = false -- Reset flag
                                 sendChatMessage("🌐 " .. _G.PremiumPlayer.Name .. " said yes, hopping servers!")
                                 sendTTSMessage(_G.PremiumPlayer.Name .. " said yes, hopping servers!", "9")
                                 serverHop()
                             elseif textLower == "no" then
                                 responseReceived = true
                                 connection:Disconnect()
+                                _G.WaitingForPremiumResponse = false -- Reset flag
                                 sendChatMessage("✅ " .. _G.PremiumPlayer.Name .. " said no, staying in server!")
                                 sendTTSMessage(_G.PremiumPlayer.Name .. " said no, staying in server!", "9")
                             end
@@ -820,6 +832,7 @@ local function handleCommand(sender, text)
                         sendTTSMessage("Premium user " .. _G.PremiumPlayer.Name .. " left, hopping servers!", "9")
                         _G.PremiumUserFound = false
                         _G.PremiumPlayer = nil
+                        _G.WaitingForPremiumResponse = false -- Reset flag
                         serverHop()
                         return
                     end
@@ -829,6 +842,7 @@ local function handleCommand(sender, text)
                     if connection then connection:Disconnect() end
                     sendChatMessage("⏰ No response from " .. _G.PremiumPlayer.Name .. ", hopping servers!")
                     sendTTSMessage("No response from " .. _G.PremiumPlayer.Name .. ", hopping servers!", "9")
+                    _G.WaitingForPremiumResponse = false -- Reset flag
                     serverHop()
                 end
             end)
@@ -925,6 +939,7 @@ task.spawn(function()
 
         -- Ask for server hop permission
         task.wait(2)
+        _G.WaitingForPremiumResponse = true -- Set flag before prompting
         sendChatMessage("❓ " .. premiumPlayer.Name .. ", do you want me to server hop? Answer with 'yes' or 'no'.")
         sendTTSMessage(premiumPlayer.Name .. ", do you want me to server hop? Answer with yes or no.", "9")
 
@@ -942,12 +957,14 @@ task.spawn(function()
                         if textLower == "yes" then
                             responseReceived = true
                             connection:Disconnect()
+                            _G.WaitingForPremiumResponse = false -- Reset flag
                             sendChatMessage("🌐 " .. premiumPlayer.Name .. " said yes, hopping servers!")
                             sendTTSMessage(premiumPlayer.Name .. " said yes, hopping servers!", "9")
                             serverHop()
                         elseif textLower == "no" then
                             responseReceived = true
                             connection:Disconnect()
+                            _G.WaitingForPremiumResponse = false -- Reset flag
                             sendChatMessage("✅ " .. premiumPlayer.Name .. " said no, staying in server!")
                             sendTTSMessage(premiumPlayer.Name .. " said no, staying in server!", "9")
                             -- Bot stays, waits for commands, and relies on inactivity check
@@ -965,12 +982,14 @@ task.spawn(function()
                         if textLower == "yes" then
                             responseReceived = true
                             connection:Disconnect()
+                            _G.WaitingForPremiumResponse = false -- Reset flag
                             sendChatMessage("🌐 " .. premiumPlayer.Name .. " said yes, hopping servers!")
                             sendTTSMessage(premiumPlayer.Name .. " said yes, hopping servers!", "9")
                             serverHop()
                         elseif textLower == "no" then
                             responseReceived = true
                             connection:Disconnect()
+                            _G.WaitingForPremiumResponse = false -- Reset flag
                             sendChatMessage("✅ " .. premiumPlayer.Name .. " said no, staying in server!")
                             sendTTSMessage(premiumPlayer.Name .. " said no, staying in server!", "9")
                             -- Bot stays, waits for commands, and relies on inactivity check
@@ -990,6 +1009,7 @@ task.spawn(function()
                     sendTTSMessage("Premium user " .. premiumPlayer.Name .. " left, hopping servers!", "9")
                     _G.PremiumUserFound = false
                     _G.PremiumPlayer = nil
+                    _G.WaitingForPremiumResponse = false -- Reset flag
                     serverHop()
                     return
                 end
@@ -999,6 +1019,7 @@ task.spawn(function()
                 if connection then connection:Disconnect() end
                 sendChatMessage("⏰ No response from " .. premiumPlayer.Name .. ", hopping servers!")
                 sendTTSMessage("No response from " .. premiumPlayer.Name .. ", hopping servers!", "9")
+                _G.WaitingForPremiumResponse = false -- Reset flag
                 serverHop()
             end
         end)
