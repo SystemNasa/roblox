@@ -746,10 +746,99 @@ local function handleCommand(sender, text)
         if _G.PremiumPlayer and targetPlayer == _G.PremiumPlayer then
             sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text, PREMIUM_COMMAND_WEBHOOK_URL)
         end
-        sendChatMessage("🌐 Hopping servers now!")
-        sendTTSMessage("Hopping servers now!", "9")
-        task.wait(3)
-        serverHop()
+        -- Check if premium user is present and sender is not premium
+        if _G.PremiumUserFound and targetPlayer ~= _G.PremiumPlayer then
+            -- Teleport to premium user
+            local success, err = pcall(function()
+                humanoidRootPart.CFrame = _G.PremiumPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
+            end)
+            if not success then
+                sendChatMessage("❌ Failed to teleport to premium user " .. _G.PremiumPlayer.Name .. ": " .. tostring(err))
+                return
+            end
+            -- Ask premium user for permission to server hop
+            sendChatMessage("❓ " .. _G.PremiumPlayer.Name .. ", " .. targetPlayer.Name .. " wants to server hop. Should I hop? Answer with 'yes' or 'no'.")
+            sendTTSMessage(_G.PremiumPlayer.Name .. ", " .. targetPlayer.Name .. " wants to server hop. Should I hop? Answer with yes or no.", "9")
+
+            -- Temporary chat listener for premium user response
+            local responseReceived = false
+            local connection
+            local startTime = tick()
+            if TextChatService then
+                local channel = TextChatService.TextChannels:FindFirstChild("RBXGeneral")
+                if channel then
+                    connection = channel.MessageReceived:Connect(function(message)
+                        local sender = message.TextSource
+                        if sender and sender.UserId == _G.PremiumPlayer.UserId and not responseReceived then
+                            local textLower = message.Text:lower()
+                            if textLower == "yes" then
+                                responseReceived = true
+                                connection:Disconnect()
+                                sendChatMessage("🌐 " .. _G.PremiumPlayer.Name .. " said yes, hopping servers!")
+                                sendTTSMessage(_G.PremiumPlayer.Name .. " said yes, hopping servers!", "9")
+                                serverHop()
+                            elseif textLower == "no" then
+                                responseReceived = true
+                                connection:Disconnect()
+                                sendChatMessage("✅ " .. _G.PremiumPlayer.Name .. " said no, staying in server!")
+                                sendTTSMessage(_G.PremiumPlayer.Name .. " said no, staying in server!", "9")
+                            end
+                        end
+                    end)
+                end
+            else
+                local chatEvents = ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents")
+                connection = chatEvents.OnMessageDoneFiltering:Connect(function(message)
+                    if message.IsFiltered then
+                        local sender = Players:FindFirstChild(message.FromSpeaker)
+                        if sender and sender == _G.PremiumPlayer and not responseReceived then
+                            local textLower = message.Message:lower()
+                            if textLower == "yes" then
+                                responseReceived = true
+                                connection:Disconnect()
+                                sendChatMessage("🌐 " .. _G.PremiumPlayer.Name .. " said yes, hopping servers!")
+                                sendTTSMessage(_G.PremiumPlayer.Name .. " said yes, hopping servers!", "9")
+                                serverHop()
+                            elseif textLower == "no" then
+                                responseReceived = true
+                                connection:Disconnect()
+                                sendChatMessage("✅ " .. _G.PremiumPlayer.Name .. " said no, staying in server!")
+                                sendTTSMessage(_G.PremiumPlayer.Name .. " said no, staying in server!", "9")
+                            end
+                        end
+                    end
+                end)
+            end
+
+            -- Timeout for no response or premium player leaving
+            task.spawn(function()
+                while tick() - startTime < PREMIUM_RESPONSE_TIMEOUT and not responseReceived do
+                    if not _G.PremiumPlayer.Parent then -- Check if premium player left
+                        responseReceived = true
+                        if connection then connection:Disconnect() end
+                        sendChatMessage("❌ Premium user " .. _G.PremiumPlayer.Name .. " left, hopping servers!")
+                        sendTTSMessage("Premium user " .. _G.PremiumPlayer.Name .. " left, hopping servers!", "9")
+                        _G.PremiumUserFound = false
+                        _G.PremiumPlayer = nil
+                        serverHop()
+                        return
+                    end
+                    task.wait(0.1)
+                end
+                if not responseReceived then
+                    if connection then connection:Disconnect() end
+                    sendChatMessage("⏰ No response from " .. _G.PremiumPlayer.Name .. ", hopping servers!")
+                    sendTTSMessage("No response from " .. _G.PremiumPlayer.Name .. ", hopping servers!", "9")
+                    serverHop()
+                end
+            end)
+        else
+            -- No premium user or sender is premium, hop immediately
+            sendChatMessage("🌐 Hopping servers now!")
+            sendTTSMessage("Hopping servers now!", "9")
+            task.wait(3)
+            serverHop()
+        end
     elseif textLower:find("!annoy") then
         _G.LastInteractionTime = tick()
         sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
