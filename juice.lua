@@ -1,5 +1,6 @@
 -- Configuration
 local ALLOW_SELF_COMMANDS = false -- Set to true to allow the bot to process commands from itself (for troubleshooting)
+local PREMIUM_LIST_URL = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/premium.lua" -- URL to Lua file with premium usernames
 local TELEPORT_DELAY = 0.05 -- Time between teleports to each player
 local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew "
 local ANNOY_TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew " -- Custom TTS for !annoy
@@ -26,6 +27,7 @@ _G.AnnoyTarget = nil
 _G.LastInteractionTime = tick()
 _G.AnimationTrack = nil -- To store the animation track
 _G.ActiveTasks = {} -- To store active tasks for cancellation
+_G.PremiumUserFound = false -- Flag to track if a premium user is in the server
 
 -- Utility functions
 local function randomHex(len)
@@ -666,6 +668,39 @@ local function serverHop()
     attemptHop()
 end
 
+-- Check for premium users
+local function checkPremiumUsers()
+    local premiumUsers = {}
+    local success, result = pcall(function()
+        local httpSuccess, luaContent = httpGetWithRetry(PREMIUM_LIST_URL, 3, 1)
+        if httpSuccess and luaContent and #luaContent > 0 then
+            local func = loadstring(luaContent)
+            if func then
+                return func()
+            else
+                error("Failed to parse Lua content from premium list")
+            end
+        else
+            error(httpSuccess and "Empty or invalid Lua content" or luaContent)
+        end
+    end)
+    if success and type(result) == "table" then
+        premiumUsers = result
+    else
+        warn("Failed to fetch or parse premium user list: " .. tostring(result))
+        return nil
+    end
+
+    for _, plr in ipairs(Players:GetPlayers()) do
+        for _, premiumName in ipairs(premiumUsers) do
+            if plr.Name:lower() == premiumName:lower() then
+                return plr
+            end
+        end
+    end
+    return nil
+end
+
 -- Find player by partial name
 local function findPlayerByPartialName(namePart)
     local namePart = namePart:lower():gsub("%s+", "")
@@ -731,6 +766,18 @@ local function handleCommand(sender, text)
         _G.LastInteractionTime = tick()
         sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
         lagServer()
+    elseif textLower:find("!premium") then
+        _G.LastInteractionTime = tick()
+        sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
+        local success, err = pcall(function()
+            humanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
+        end)
+        if not success then
+            sendChatMessage("❌ Teleport failed in premium: " .. tostring(err))
+        else
+            sendChatMessage("🌟 Premium users get special treatment! They prevent the server from lagging, buy my gamepass to be whitelisted !")
+            sendTTSMessage("Premium users get special treatment! They prevent the server from lagging, buy my gamepass to be whitelisted !", "9")
+        end
     end
 end
 
@@ -738,7 +785,7 @@ end
 task.spawn(function()
     task.wait(COMMAND_REMINDER_INTERVAL)
     while true do
-        sendChatMessage("🤖 CLANKER JOINED | Use these Commands, !stop | !hop | !annoy user | !lag")
+        sendChatMessage("🤖 CLANKER JOINED | Use these Commands, !stop | !hop | !annoy user | !lag | !premium")
         task.wait(COMMAND_REMINDER_INTERVAL)
     end
 end)
@@ -747,21 +794,39 @@ end)
 task.spawn(function()
     task.wait(2)
     copyAvatarAndGetTools("24k_mxtty1") -- Copy 24k_mxtty1 avatar and remove items
-    warn("Sending join message at " .. os.date("%H:%M:%S"))
-    sendChatMessage("🤖 CLANKER JOINED | Use these Commands, !stop | !hop | !annoy <player> | !lag")
-    if _G.TrollingActive then
-        sendTTSMessage(TTS_MESSAGE, "9")
+
+    -- Check for premium users
+    local premiumPlayer = checkPremiumUsers()
+    if premiumPlayer and premiumPlayer.Character and premiumPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        _G.PremiumUserFound = true
+        _G.TrollingActive = false -- Disable default trolling
+        local success, err = pcall(function()
+            humanoidRootPart.CFrame = premiumPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
+        end)
+        if success then
+            sendChatMessage("🌟 Hello premium user " .. premiumPlayer.Name .. ", I won't lag this server thanks to you!")
+            sendTTSMessage("Hello premium user " .. premiumPlayer.Name .. ", I won't lag this server thanks to you!", "9")
+        else
+            warn("Failed to teleport to premium user: " .. tostring(err))
+            sendChatMessage("❌ Failed to teleport to premium user " .. premiumPlayer.Name .. ".")
+        end
+    else
+        warn("No premium users found, proceeding with normal trolling.")
+        sendChatMessage("🤖 CLANKER JOINED | Use these Commands, !stop | !hop | !annoy <player> | !lag | !premium")
+        if _G.TrollingActive then
+            sendTTSMessage(TTS_MESSAGE, "9")
+        end
+        task.wait(1)
+        task.spawn(toolLoop)
+        task.spawn(teleportLoop)
     end
-    task.wait(1)
-    task.spawn(toolLoop)
-    task.spawn(teleportLoop)
 end)
 
 -- Inactivity check loop
 task.spawn(function()
     while true do
         task.wait(1)
-        if tick() - _G.LastInteractionTime >= SERVER_HOP_DELAY then
+        if tick() - _G.LastInteractionTime >= SERVER_HOP_DELAY and not _G.PremiumUserFound then
             sendChatMessage("⏰ No interactions for " .. SERVER_HOP_DELAY .. " seconds, hopping servers!")
             sendTTSMessage("No interactions for " .. SERVER_HOP_DELAY .. " seconds, hopping servers!", "9")
             serverHop()
