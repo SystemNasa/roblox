@@ -455,13 +455,21 @@ local function annoyTeleportLoop()
             return
         end
 
-        -- Make character huge by firing the remote
-        success, err = pcall(function()
-            local args = { [1] = "Huge" }
-            game:GetService("ReplicatedStorage"):WaitForChild("SizePreset", 9e9):FireServer(unpack(args))
-        end)
-        if not success then
-            sendChatMessage("❌ Failed to set character size to Huge: " .. tostring(err))
+        -- Attempt to make character huge by firing the SizePreset remote
+        local sizePresetRemote = game:GetService("ReplicatedStorage"):FindFirstChild("SizePreset")
+        if sizePresetRemote then
+            success, err = pcall(function()
+                sizePresetRemote:FireServer("Huge")
+            end)
+            if success then
+                sendChatMessage("✅ Fired SizePreset remote with 'Huge' argument!")
+            else
+                sendChatMessage("❌ Failed to fire SizePreset remote: " .. tostring(err))
+                stopCurrentMode()
+                return
+            end
+        else
+            sendChatMessage("❌ SizePreset remote not found in ReplicatedStorage!")
             stopCurrentMode()
             return
         end
