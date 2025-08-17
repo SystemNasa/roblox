@@ -8,6 +8,7 @@ local LAG_DURATION = 15 -- Duration for !lag command in seconds
 local COMMAND_REMINDER_INTERVAL = 35 -- Time between command reminders
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1406310015152689225/ixVarUpenxotKJLC6rv48dvL0id6rL4AvE90gp-t0PF8zbv8toDYG_u4YomJ4-r9MoLs"
 local ANIMATION_ID = "rbxassetid://113820516315642" -- Animation ID for !annoy
+local FOLLOW_SPEED = 30 -- Speed for following in studs per second
 
 -- Prevent multiple executions
 if _G.TrollScriptExecuted then
@@ -198,7 +199,6 @@ local function createNotification(text, color)
     textLabel.BackgroundTransparency = 1
     textLabel.Text = text
     textLabel.TextColor3 = color
-    textLabel.Font = Enum.Font.Gotham
     textLabel.TextSize = 16
     textLabel.TextWrapped = true
     textLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -495,46 +495,91 @@ local function loadAnimation(humanoid)
     end
 end
 
--- Teleport loop for annoy mode with animation and facing
+-- Teleport and follow loop for annoy mode with animation
 local function annoyTeleportLoop()
     local taskId = task.spawn(function()
-        -- Load animation when annoy mode starts
+        -- Validate target and character
+        if not _G.AnnoyTarget or not _G.AnnoyTarget.Character or not _G.AnnoyTarget.Character:FindFirstChild("HumanoidRootPart") then
+            createNotification("Invalid target for annoy mode!", COLORS.NOTIFICATION_ERROR)
+            stopCurrentMode()
+            return
+        end
+
+        -- Initial teleport to target
         local success, err = pcall(function()
+            local targetPos = _G.AnnoyTarget.Character.HumanoidRootPart.Position
+            local newPos = targetPos + (targetPos - humanoidRootPart.Position).Unit * 2
+            humanoidRootPart.CFrame = CFrame.lookAt(newPos, targetPos)
+        end)
+        if not success then
+            createNotification("Initial teleport failed: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+            stopCurrentMode()
+            return
+        end
+
+        -- Load and play animation
+        success, err = pcall(function()
             loadAnimation(humanoid)
         end)
         if not success then
             createNotification("Failed to load animation: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+            stopCurrentMode()
+            return
         end
 
+        -- Follow target by interpolating position
+        local lastUpdate = tick()
         while _G.AnnoyMode do
-            if _G.AnnoyTarget and _G.AnnoyTarget.Character and _G.AnnoyTarget.Character:FindFirstChild("HumanoidRootPart") then
+            if _G.AnnoyTarget and _G.AnnoyTarget.Character and _G.AnnoyTarget.Character:FindFirstChild("HumanoidRootPart") and humanoid and humanoid.Health > 0 then
                 local targetPos = _G.AnnoyTarget.Character.HumanoidRootPart.Position
                 local myPos = humanoidRootPart.Position
-                -- Position 2 studs away and face the target
-                local newPos = targetPos + (myPos - targetPos).Unit * 2
-                local success, err = pcall(function()
-                    humanoidRootPart.CFrame = CFrame.lookAt(newPos, targetPos)
-                end)
-                if not success then
-                    createNotification("Teleport failed in annoy: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+                local distance = (targetPos - myPos).Magnitude
+                local deltaTime = tick() - lastUpdate
+                lastUpdate = tick()
+
+                -- Calculate target position 2 studs away
+                local direction = (targetPos - myPos).Unit
+                local desiredPos = targetPos - direction * 2
+
+                -- Move toward desired position at FOLLOW_SPEED
+                if distance > 2 then
+                    local maxDistance = FOLLOW_SPEED * deltaTime
+                    local moveVector = (desiredPos - myPos)
+                    local moveDistance = moveVector.Magnitude
+                    local newPos = myPos
+                    if moveDistance > maxDistance then
+                        newPos = myPos + moveVector.Unit * maxDistance
+                    else
+                        newPos = desiredPos
+                    end
+
+                    success, err = pcall(function()
+                        humanoidRootPart.CFrame = CFrame.lookAt(newPos, Vector3.new(targetPos.X, newPos.Y, targetPos.Z))
+                    end)
+                    if not success then
+                        createNotification("Failed to update position: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+                        break
+                    end
                 end
+
                 -- Ensure animation is playing
-                if _G.AnimationTrack and _G.AnimationTrack.IsPlaying == false then
+                if _G.AnimationTrack and not _G.AnimationTrack.IsPlaying then
                     _G.AnimationTrack:Play()
                 end
             else
-                -- Stop animation if target is invalid
-                if _G.AnimationTrack then
-                    _G.AnimationTrack:Stop()
-                end
+                -- Stop if target becomes invalid
+                createNotification("Target lost or invalid!", COLORS.NOTIFICATION_ERROR)
+                break
             end
-            task.wait(TELEPORT_DELAY)
+            task.wait() -- Run every frame for smooth movement
         end
-        -- Stop animation when annoy mode ends
+
+        -- Clean up when annoy mode ends
         if _G.AnimationTrack then
             _G.AnimationTrack:Stop()
             _G.AnimationTrack = nil
         end
+        stopCurrentMode()
     end)
     table.insert(_G.ActiveTasks, taskId)
 end
