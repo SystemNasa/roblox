@@ -820,7 +820,7 @@ task.spawn(function()
         end
     else
         warn("No premium users found, proceeding with normal trolling.")
-        sendChatMessage("🤖 CLANKER JOINED | Use these Commands, !stop | !hop | !annoy <player> | !lag | !premium")
+        sendChatMessage("🤖 CLANKER JOINED | Use these Commands, !stop | !hop | !annoy user | !lag | !premium")
         if _G.TrollingActive then
             sendTTSMessage(TTS_MESSAGE, "9")
         end
