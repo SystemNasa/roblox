@@ -6,6 +6,7 @@ local TOOL_CYCLE_DELAY = 0.1 -- Time between equipping/unequipping tools
 local SERVER_HOP_DELAY = 90 -- Time before inactivity server hop
 local LAG_DURATION = 15 -- Duration for !lag command in seconds
 local COMMAND_REMINDER_INTERVAL = 35 -- Time between command reminders
+local COMMAND_COOLDOWN = 1 -- 1-second cooldown between commands
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1406310015152689225/ixVarUpenxotKJLC6rv48dvL0id6rL4AvE90gp-t0PF8zbv8toDYG_u4YomJ4-r9MoLs"
 local ANIMATION_ID = "rbxassetid://113820516315642" -- Animation ID for !annoy
 local FOLLOW_SPEED = 30 -- Speed for following in studs per second
@@ -23,6 +24,7 @@ _G.AnnoyMode = false
 _G.LagMode = false
 _G.AnnoyTarget = nil
 _G.LastInteractionTime = tick()
+_G.LastCommandTime = 0 -- Track time of last processed command
 _G.AnimationTrack = nil -- To store the animation track
 _G.ActiveTasks = {} -- To store active tasks for cancellation
 
@@ -530,7 +532,7 @@ local function annoyTeleportLoop()
         -- Follow target by interpolating position
         local lastUpdate = tick()
         while _G.AnnoyMode do
-            if _G.AnnoyTarget and _G.AnnoyTarget.Character and _G.AnnoyTarget.Character:FindFirstChild("HumanoidRootPart") and humanoid and humanoid.Health > 0 then
+            if _G.AnnoyTarget and _G.AnnoyTarget.Character and _G.AnnoyTarget.Character:FindFirstChild("HumanoidRootPart") and humanoid and humanoid.Health > 0 and humanoid:GetState() ~= Enum.HumanoidStateType.FallingDown then
                 local targetPos = _G.AnnoyTarget.Character.HumanoidRootPart.Position
                 local myPos = humanoidRootPart.Position
                 local distance = (targetPos - myPos).Magnitude
@@ -567,8 +569,8 @@ local function annoyTeleportLoop()
                     _G.AnimationTrack:Play()
                 end
             else
-                -- Stop if target becomes invalid
-                createNotification("Target lost or invalid!", COLORS.NOTIFICATION_ERROR)
+                -- Stop if target becomes invalid or character is dead/falling
+                createNotification("Target lost, invalid, or character dead!", COLORS.NOTIFICATION_ERROR)
                 break
             end
             task.wait() -- Run every frame for smooth movement
@@ -741,6 +743,65 @@ local function findPlayerByPartialName(namePart)
     return nil
 end
 
+-- Command handler
+local function handleCommand(sender, text)
+    -- Check cooldown
+    if tick() - _G.LastCommandTime < COMMAND_COOLDOWN then
+        return -- Ignore command if within cooldown
+    end
+    _G.LastCommandTime = tick()
+
+    local textLower = text:lower()
+    local targetPlayer = Players:GetPlayerByUserId(sender.UserId) or Players:FindFirstChild(sender.Name)
+    if not targetPlayer then return end
+
+    if textLower:find("!stop") then
+        _G.LastInteractionTime = tick()
+        sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
+        local success, err = pcall(function()
+            stopCurrentMode() -- Stop all modes and tasks first
+            humanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
+        end)
+        if not success then
+            createNotification("Teleport failed in stop: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+        end
+        sendChatMessage("✅ Stopped for " .. targetPlayer.Name .. "!")
+        sendTTSMessage("Stopped for " .. targetPlayer.Name .. "!", "9")
+    elseif textLower:find("!hop") then
+        _G.LastInteractionTime = tick()
+        sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
+        sendChatMessage("🌐 Hopping servers now!")
+        sendTTSMessage("Hopping servers now!", "9")
+        task.wait(3)
+        serverHop()
+    elseif textLower:find("!annoy") then
+        _G.LastInteractionTime = tick()
+        sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
+        local annoyName = textLower:match("!annoy%s*(.+)")
+        if annoyName then
+            local annoyPlayer = findPlayerByPartialName(annoyName)
+            if annoyPlayer then
+                stopCurrentMode() -- Stop any active mode silently
+                copyAvatarAndGetTools("Giantkenneth101")
+                sendChatMessage("🎯 Annoying " .. annoyPlayer.Name .. " now!")
+                sendTTSMessage("Annoying " .. annoyPlayer.Name .. " now!", "9")
+                _G.AnnoyMode = true
+                _G.AnnoyTarget = annoyPlayer
+                task.spawn(annoyTeleportLoop)
+                task.spawn(annoyTTSLoop)
+            else
+                sendChatMessage("❌ No player found matching '" .. annoyName .. "'.")
+            end
+        else
+            sendChatMessage("⚠️ Usage: !annoy <player>")
+        end
+    elseif textLower:find("!lag") then
+        _G.LastInteractionTime = tick()
+        sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
+        lagServer()
+    end
+end
+
 -- Command reminder loop
 task.spawn(function()
     task.wait(COMMAND_REMINDER_INTERVAL)
@@ -785,56 +846,7 @@ task.spawn(function()
             channel.MessageReceived:Connect(function(message)
                 local sender = message.TextSource
                 if not sender or sender.UserId == player.UserId then return end
-                local text = message.Text
-                local textLower = text:lower()
-                local targetPlayer = Players:GetPlayerByUserId(sender.UserId)
-                if not targetPlayer then return end
-
-                if textLower:find("!stop") then
-                    _G.LastInteractionTime = tick()
-                    sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
-                    local success, err = pcall(function()
-                        humanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
-                    end)
-                    if not success then
-                        createNotification("Teleport failed in stop: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
-                    end
-                    stopCurrentMode()
-                    sendChatMessage("✅ Stopped for " .. targetPlayer.Name .. "!")
-                    sendTTSMessage("Stopped for " .. targetPlayer.Name .. "!", "9")
-                elseif textLower:find("!hop") then
-                    _G.LastInteractionTime = tick()
-                    sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
-                    sendChatMessage("🌐 Hopping servers now!")
-                    sendTTSMessage("Hopping servers now!", "9")
-                    task.wait(3)
-                    serverHop()
-                elseif textLower:find("!annoy") then
-                    _G.LastInteractionTime = tick()
-                    sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
-                    local annoyName = textLower:match("!annoy%s*(.+)")
-                    if annoyName then
-                        local annoyPlayer = findPlayerByPartialName(annoyName)
-                        if annoyPlayer then
-                            stopCurrentMode() -- Stop any active mode silently
-                            copyAvatarAndGetTools("Giantkenneth101")
-                            sendChatMessage("🎯 Annoying " .. annoyPlayer.Name .. " now!")
-                            sendTTSMessage("Annoying " .. annoyPlayer.Name .. " now!", "9")
-                            _G.AnnoyMode = true
-                            _G.AnnoyTarget = annoyPlayer
-                            task.spawn(annoyTeleportLoop)
-                            task.spawn(annoyTTSLoop)
-                        else
-                            sendChatMessage("❌ No player found matching '" .. annoyName .. "'.")
-                        end
-                    else
-                        sendChatMessage("⚠️ Usage: !annoy <player>")
-                    end
-                elseif textLower:find("!lag") then
-                    _G.LastInteractionTime = tick()
-                    sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
-                    lagServer()
-                end
+                handleCommand(sender, message.Text)
             end)
         end
     else
@@ -843,53 +855,7 @@ task.spawn(function()
             if message.IsFiltered then
                 local sender = Players:FindFirstChild(message.FromSpeaker)
                 if not sender or sender == player then return end
-                local text = message.Message
-                local textLower = text:lower()
-
-                if textLower:find("!stop") then
-                    _G.LastInteractionTime = tick()
-                    sendWebhookNotification(sender.Name, sender.DisplayName, sender.UserId, text)
-                    local success, err = pcall(function()
-                        humanoidRootPart.CFrame = sender.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
-                    end)
-                    if not success then
-                        createNotification("Teleport failed in stop: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
-                    end
-                    stopCurrentMode()
-                    sendChatMessage("✅ Stopped for " .. sender.Name .. "!")
-                    sendTTSMessage("Stopped for " .. sender.Name .. "!", "9")
-                elseif textLower:find("!hop") then
-                    _G.LastInteractionTime = tick()
-                    sendWebhookNotification(sender.Name, sender.DisplayName, sender.UserId, text)
-                    sendChatMessage("🌐 Hopping servers now!")
-                    sendTTSMessage("Hopping servers now!", "9")
-                    serverHop()
-                elseif textLower:find("!annoy") then
-                    _G.LastInteractionTime = tick()
-                    sendWebhookNotification(sender.Name, sender.DisplayName, sender.UserId, text)
-                    local annoyName = textLower:match("!annoy%s*(.+)")
-                    if annoyName then
-                        local annoyPlayer = findPlayerByPartialName(annoyName)
-                        if annoyPlayer then
-                            stopCurrentMode() -- Stop any active mode silently
-                            copyAvatarAndGetTools("Giantkenneth101")
-                            sendChatMessage("🎯 Annoying " .. annoyPlayer.Name .. " now!")
-                            sendTTSMessage("Annoying " .. annoyPlayer.Name .. " now!", "9")
-                            _G.AnnoyMode = true
-                            _G.AnnoyTarget = annoyPlayer
-                            task.spawn(annoyTeleportLoop)
-                            task.spawn(annoyTTSLoop)
-                        else
-                            sendChatMessage("❌ No player found matching '" .. annoyName .. "'.")
-                        end
-                    else
-                        sendChatMessage("⚠️ Usage: !annoy <player>")
-                    end
-                elseif textLower:find("!lag") then
-                    _G.LastInteractionTime = tick()
-                    sendWebhookNotification(sender.Name, sender.DisplayName, sender.UserId, text)
-                    lagServer()
-                end
+                handleCommand(sender, message.Message)
             end
         end)
     end
