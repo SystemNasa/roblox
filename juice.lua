@@ -107,6 +107,14 @@ player.CharacterAdded:Connect(function(newChar)
         if not success then
             warn("Failed to load animation on respawn: " .. tostring(err))
         end
+        -- Reapply size change on respawn in annoy mode
+        success, err = pcall(function()
+            local args = { [1] = "Huge" }
+            ReplicatedStorage:WaitForChild("Size Preset", 9e9):FireServer(unpack(args))
+        end)
+        if not success then
+            warn("Failed to reapply size change on respawn: " .. tostring(err))
+        end
     end
 end)
 
@@ -474,6 +482,7 @@ local function annoyTeleportLoop()
                 -- Move toward desired position at FOLLOW_SPEED
                 if distance > 2 then
                     local maxDistance = FOLLOW_SPEED * deltaTime
+                    smoothMaxDistance = math.min(maxDistance, distance - 2)
                     local moveVector = (desiredPos - myPos)
                     local moveDistance = moveVector.Magnitude
                     local newPos = myPos
@@ -701,6 +710,15 @@ local function handleCommand(sender, text)
             if annoyPlayer then
                 stopCurrentMode() -- Stop any active mode silently
                 copyAvatarAndGetTools("Giantkenneth101")
+                -- Make character huge
+                local success, err = pcall(function()
+                    local args = { [1] = "Huge" }
+                    ReplicatedStorage:WaitForChild("Size Preset", 9e9):FireServer(unpack(args))
+                end)
+                if not success then
+                    warn("Failed to set size to Huge: " .. tostring(err))
+                    sendChatMessage("❌ Failed to set size to Huge: " .. tostring(err))
+                end
                 sendChatMessage("🎯 Annoying " .. annoyPlayer.Name .. " now!")
                 sendTTSMessage("Annoying " .. annoyPlayer.Name .. " now!", "9")
                 _G.AnnoyMode = true
@@ -711,7 +729,7 @@ local function handleCommand(sender, text)
                 sendChatMessage("❌ No player found matching '" .. annoyName .. "'.")
             end
         else
-            sendChatMessage("⚠️ Usage: !annoy user/display doesnt need to be fully typed")
+            sendChatMessage("⚠️ Usage: !annoy <player>")
         end
     elseif textLower:find("!lag") then
         if _G.LagMode then
@@ -728,7 +746,7 @@ end
 task.spawn(function()
     task.wait(COMMAND_REMINDER_INTERVAL)
     while true do
-        sendChatMessage("🤖 CLANKER JOINED | Use these Commands, !stop | !hop | !annoy user | !lag")
+        sendChatMessage("🤖 CLANKER JOINED | Use these Commands, !stop | !hop | !annoy <player> | !lag")
         task.wait(COMMAND_REMINDER_INTERVAL)
     end
 end)
