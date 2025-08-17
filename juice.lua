@@ -1,4 +1,5 @@
 -- Configuration
+local ALLOW_SELF_COMMANDS = false -- Set to true to allow the bot to process commands from itself (for troubleshooting)
 local TELEPORT_DELAY = 0.05 -- Time between teleports to each player
 local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew "
 local ANNOY_TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew " -- Custom TTS for !annoy
@@ -95,7 +96,7 @@ player.CharacterAdded:Connect(function(newChar)
     character = newChar
     humanoidRootPart = newChar:WaitForChild("HumanoidRootPart")
     humanoid = newChar:WaitForChild("Humanoid")
-    -- Reload animation and size on character respawn
+    -- Reload animation on character respawn
     if _G.AnnoyMode and _G.AnnoyTarget then
         local success, err = pcall(function()
             local animator = humanoid:FindFirstChildOfClass("Animator")
@@ -103,15 +104,9 @@ player.CharacterAdded:Connect(function(newChar)
                 _G.AnimationTrack = animator:LoadAnimation(animation)
                 _G.AnimationTrack:Play()
             end
-            -- Re-fire SizePreset remote on respawn
-            local sizePresetRemote = ReplicatedStorage:FindFirstChild("SizePreset", true)
-            if sizePresetRemote then
-                sizePresetRemote:FireServer("Huge")
-            end
         end)
         if not success then
-            warn("Failed to load animation or size on respawn: " .. tostring(err))
-            sendChatMessage("❌ Failed to reload animation/size on respawn: " .. tostring(err))
+            warn("Failed to load animation on respawn: " .. tostring(err))
         end
     end
 end)
@@ -167,13 +162,12 @@ end
 local function sendChatMessage(message)
     local success, err = pcall(function()
         if TextChatService then
-            local textChannels = TextChatService:WaitForChild("TextChannels", 5)
-            local channel = textChannels and (textChannels:FindFirstChild("RBXGeneral") or textChannels:GetChildren()[1])
+            local textChannels = TextChatService:WaitForChild("TextChannels")
+            local channel = textChannels:FindFirstChild("RBXGeneral") or textChannels:GetChildren()[1]
             if channel then
                 channel:SendAsync(message)
             else
                 warn("No text channel found for sending message")
-                ReplicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(message, "All")
             end
         else
             ReplicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(message, "All")
@@ -192,11 +186,9 @@ local function sendTTSMessage(message, voice)
         end)
         if not success then
             warn("TTS failed: " .. tostring(err))
-            sendChatMessage("❌ TTS failed: " .. tostring(err))
         end
     else
         warn("TTS remote not found!")
-        sendChatMessage("❌ TTS remote not found!")
     end
 end
 
@@ -322,7 +314,6 @@ local function copyAvatarAndGetTools(username)
     end)
     if not success then
         warn("Failed to copy avatar: " .. tostring(err))
-        sendChatMessage("❌ Failed to copy avatar: " .. tostring(err))
     end
 
     -- Remove targeted items from player's character if copying 24k_mxtty1
@@ -381,13 +372,6 @@ local function stopCurrentMode()
             warn("Failed to unequip tools: " .. tostring(err))
         end
     end
-    -- Reset size if possible
-    local sizePresetRemote = ReplicatedStorage:FindFirstChild("SizePreset", true)
-    if sizePresetRemote then
-        pcall(function()
-            sizePresetRemote:FireServer("Normal")
-        end)
-    end
 end
 
 -- Tool cycling loop
@@ -437,77 +421,40 @@ local function loadAnimation(humanoid)
     if animator then
         _G.AnimationTrack = animator:LoadAnimation(animation)
         _G.AnimationTrack:Play()
-        sendChatMessage("✅ Animation loaded and playing!")
     else
         warn("Animator not found!")
-        sendChatMessage("❌ Animator not found for animation!")
     end
-end
-
--- Function to find remote recursively
-local function findRemote(name)
-    local function search(container)
-        local remote = container:FindFirstChild(name)
-        if remote then return remote end
-        for _, child in ipairs(container:GetDescendants()) do
-            if child:IsA("RemoteEvent") and child.Name == name then
-                return child
-            end
-        end
-        return nil
-    end
-    return search(game:GetService("ReplicatedStorage"))
 end
 
 -- Teleport and follow loop for annoy mode with animation and size change
 local function annoyTeleportLoop()
     local taskId = task.spawn(function()
-        sendChatMessage("🚀 Starting annoy mode...")
         -- Validate target and character
         if not _G.AnnoyTarget or not _G.AnnoyTarget.Character or not _G.AnnoyTarget.Character:FindFirstChild("HumanoidRootPart") then
             sendChatMessage("❌ Invalid target for annoy mode!")
-            warn("Annoy mode failed: Invalid target or missing HumanoidRootPart")
             stopCurrentMode()
             return
         end
 
-        -- Initial teleport to target
+        -- Fire SizePreset remote to make character huge
         local success, err = pcall(function()
+            local args = { [1] = "Huge" }
+            game:GetService("ReplicatedStorage"):WaitForChild("SizePreset"):FireServer(unpack(args))
+        end)
+        if not success then
+            sendChatMessage("❌ Failed to set character size to Huge: " .. tostring(err))
+        end
+
+        -- Initial teleport to target
+        success, err = pcall(function()
             local targetPos = _G.AnnoyTarget.Character.HumanoidRootPart.Position
             local newPos = targetPos + (targetPos - humanoidRootPart.Position).Unit * 2
             humanoidRootPart.CFrame = CFrame.lookAt(newPos, targetPos)
         end)
         if not success then
             sendChatMessage("❌ Initial teleport failed: " .. tostring(err))
-            warn("Annoy mode failed: Teleport error - " .. tostring(err))
             stopCurrentMode()
             return
-        end
-        sendChatMessage("✅ Teleported to target!")
-
-        -- Attempt to make character huge by firing the SizePreset remote
-        local sizePresetRemote
-        local attempts = 0
-        local maxAttempts = 5
-        while attempts < maxAttempts do
-            sizePresetRemote = findRemote("SizePreset")
-            if sizePresetRemote then break end
-            attempts = attempts + 1
-            task.wait(1)
-        end
-        if sizePresetRemote then
-            success, err = pcall(function()
-                sizePresetRemote:FireServer("Huge")
-            end)
-            if success then
-                sendChatMessage("✅ Fired SizePreset remote with 'Huge' argument!")
-            else
-                sendChatMessage("❌ Failed to fire SizePreset remote: " .. tostring(err))
-                warn("Annoy mode: Failed to fire SizePreset - " .. tostring(err))
-            end
-        else
-            sendChatMessage("❌ SizePreset remote not found after " .. maxAttempts .. " attempts!")
-            warn("Annoy mode: SizePreset remote not found in ReplicatedStorage")
         end
 
         -- Load and play animation
@@ -516,7 +463,8 @@ local function annoyTeleportLoop()
         end)
         if not success then
             sendChatMessage("❌ Failed to load animation: " .. tostring(err))
-            warn("Annoy mode: Failed to load animation - " .. tostring(err))
+            stopCurrentMode()
+            return
         end
 
         -- Follow target by interpolating position
@@ -550,13 +498,17 @@ local function annoyTeleportLoop()
                     end)
                     if not success then
                         sendChatMessage("❌ Failed to update position: " .. tostring(err))
-                        warn("Annoy mode: Failed to update position - " .. tostring(err))
                         break
                     end
                 end
+
+                -- Ensure animation is playing
+                if _G.AnimationTrack and not _G.AnimationTrack.IsPlaying then
+                    _G.AnimationTrack:Play()
+                end
             else
+                -- Stop if target becomes invalid or character is dead/falling
                 sendChatMessage("❌ Target lost, invalid, or character dead!")
-                warn("Annoy mode: Target lost or character invalid")
                 break
             end
             task.wait() -- Run every frame for smooth movement
@@ -567,12 +519,6 @@ local function annoyTeleportLoop()
             _G.AnimationTrack:Stop()
             _G.AnimationTrack = nil
         end
-        if sizePresetRemote then
-            pcall(function()
-                sizePresetRemote:FireServer("Normal")
-            end)
-        end
-        sendChatMessage("🏁 Annoy mode stopped!")
         stopCurrentMode()
     end)
     table.insert(_G.ActiveTasks, taskId)
@@ -581,12 +527,10 @@ end
 -- TTS loop for annoy mode
 local function annoyTTSLoop()
     local taskId = task.spawn(function()
-        sendChatMessage("🔊 Starting TTS loop for annoy mode...")
         while _G.AnnoyMode do
             sendTTSMessage(ANNOY_TTS_MESSAGE, "9")
             task.wait(11)
         end
-        sendChatMessage("🔇 TTS loop for annoy mode stopped!")
     end)
     table.insert(_G.ActiveTasks, taskId)
 end
@@ -726,7 +670,7 @@ end
 local function findPlayerByPartialName(namePart)
     local namePart = namePart:lower():gsub("%s+", "")
     for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= player and (plr.Name:lower():find(namePart) or plr.DisplayName:lower():gsub("%s+", ""):find(namePart)) then
+        if (ALLOW_SELF_COMMANDS or plr ~= player) and (plr.Name:lower():find(namePart) or plr.DisplayName:lower():gsub("%s+", ""):find(namePart)) then
             return plr
         end
     end
@@ -748,7 +692,6 @@ local function handleCommand(sender, text)
         end)
         if not success then
             sendChatMessage("❌ Teleport failed in stop: " .. tostring(err))
-            warn("Stop command: Teleport failed - " .. tostring(err))
         end
         sendChatMessage("✅ Stopped for " .. targetPlayer.Name .. "!")
         sendTTSMessage("Stopped for " .. targetPlayer.Name .. "!", "9")
@@ -767,9 +710,8 @@ local function handleCommand(sender, text)
             local annoyPlayer = findPlayerByPartialName(annoyName)
             if annoyPlayer then
                 stopCurrentMode() -- Stop any active mode silently
-                sendChatMessage("🎯 Starting annoy mode for " .. annoyPlayer.Name .. "...")
                 copyAvatarAndGetTools("Giantkenneth101")
-                sendChatMessage("✅ Copied Giantkenneth101 avatar!")
+                sendChatMessage("🎯 Annoying " .. annoyPlayer.Name .. " now!")
                 sendTTSMessage("Annoying " .. annoyPlayer.Name .. " now!", "9")
                 _G.AnnoyMode = true
                 _G.AnnoyTarget = annoyPlayer
@@ -777,7 +719,6 @@ local function handleCommand(sender, text)
                 task.spawn(annoyTTSLoop)
             else
                 sendChatMessage("❌ No player found matching '" .. annoyName .. "'.")
-                warn("Annoy command: No player found matching '" .. annoyName .. "'")
             end
         else
             sendChatMessage("⚠️ Usage: !annoy user/display doesnt need to be fully typed")
@@ -836,19 +777,16 @@ task.spawn(function()
         if channel then
             channel.MessageReceived:Connect(function(message)
                 local sender = message.TextSource
-                if not sender or sender.UserId == player.UserId then return end
+                if not sender or (not ALLOW_SELF_COMMANDS and sender.UserId == player.UserId) then return end
                 handleCommand(sender, message.Text)
             end)
-        else
-            warn("RBXGeneral channel not found!")
-            sendChatMessage("❌ RBXGeneral channel not found, falling back to legacy chat!")
         end
     else
         local chatEvents = ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents")
         chatEvents.OnMessageDoneFiltering:Connect(function(message)
             if message.IsFiltered then
                 local sender = Players:FindFirstChild(message.FromSpeaker)
-                if not sender or sender == player then return end
+                if not sender or (not ALLOW_SELF_COMMANDS and sender == player) then return end
                 handleCommand(sender, message.Message)
             end
         end)
