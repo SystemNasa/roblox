@@ -797,8 +797,8 @@ local function handleCommand(sender, text)
         if not success then
             sendChatMessage("❌ Teleport failed in premium: " .. tostring(err))
         else
-            sendChatMessage("🌟 Premium users get special treatment! They prevent the server from lagging, buy my gamepass to be whitelisted!")
-            sendTTSMessage("Premium users get special treatment! They prevent the server from lagging, buy my gamepass to be whitelisted!", "9")
+            sendChatMessage("🌟 Premium users get special treatment! They prevent the server from lagging, friend me to be whitelisted!")
+            sendTTSMessage("Premium users get special treatment! They prevent the server from lagging, friend me to be whitelisted!", "9")
         end
     end
 end
