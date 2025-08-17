@@ -12,7 +12,7 @@ local WEBHOOK_URL = "https://discord.com/api/webhooks/1406310015152689225/ixVarU
 local PREMIUM_COMMAND_WEBHOOK_URL = "https://discord.com/api/webhooks/1406685652086554726/Kk53I8kVYmuP82iAHQ3ZN6xE60RI1mx2fUx2W477ndtajUAECz-jNG2bgSdWA5vm8fg_"
 local ANIMATION_ID = "rbxassetid://113820516315642" -- Animation ID for !annoy
 local FOLLOW_SPEED = 30 -- Speed for following in studs per second
-local PREMIUM_RESPONSE_TIMEOUT = 10 -- Timeout for premium user response (seconds)
+local PREMIUM_RESPONSE_TIMEOUT = 20 -- Timeout for premium user response (seconds)
 
 -- Prevent multiple executions
 if _G.TrollScriptExecuted then
