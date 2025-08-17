@@ -722,15 +722,15 @@ local function handleCommand(sender, text)
     local targetPlayer = Players:GetPlayerByUserId(sender.UserId) or Players:FindFirstChild(sender.Name)
     if not targetPlayer then return end
 
-    -- Log command to original webhook
-    sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
-    -- Log to premium command webhook if sender is the premium user
-    if _G.PremiumPlayer and targetPlayer == _G.PremiumPlayer then
-        sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text, PREMIUM_COMMAND_WEBHOOK_URL)
-    end
+    -- Only process commands starting with "!"
+    if not textLower:find("^!") then return end
 
     if textLower:find("!stop") then
         _G.LastInteractionTime = tick()
+        sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
+        if _G.PremiumPlayer and targetPlayer == _G.PremiumPlayer then
+            sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text, PREMIUM_COMMAND_WEBHOOK_URL)
+        end
         local success, err = pcall(function()
             stopCurrentMode() -- Stop all modes and tasks first
             humanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
@@ -742,12 +742,20 @@ local function handleCommand(sender, text)
         sendTTSMessage("Stopped for " .. targetPlayer.Name .. "!", "9")
     elseif textLower:find("!hop") then
         _G.LastInteractionTime = tick()
+        sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
+        if _G.PremiumPlayer and targetPlayer == _G.PremiumPlayer then
+            sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text, PREMIUM_COMMAND_WEBHOOK_URL)
+        end
         sendChatMessage("🌐 Hopping servers now!")
         sendTTSMessage("Hopping servers now!", "9")
         task.wait(3)
         serverHop()
     elseif textLower:find("!annoy") then
         _G.LastInteractionTime = tick()
+        sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
+        if _G.PremiumPlayer and targetPlayer == _G.PremiumPlayer then
+            sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text, PREMIUM_COMMAND_WEBHOOK_URL)
+        end
         local annoyName = textLower:match("!annoy%s*(.+)")
         if annoyName then
             local annoyPlayer = findPlayerByPartialName(annoyName)
@@ -772,9 +780,17 @@ local function handleCommand(sender, text)
             return
         end
         _G.LastInteractionTime = tick()
+        sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
+        if _G.PremiumPlayer and targetPlayer == _G.PremiumPlayer then
+            sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text, PREMIUM_COMMAND_WEBHOOK_URL)
+        end
         lagServer()
     elseif textLower:find("!premium") then
         _G.LastInteractionTime = tick()
+        sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
+        if _G.PremiumPlayer and targetPlayer == _G.PremiumPlayer then
+            sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text, PREMIUM_COMMAND_WEBHOOK_URL)
+        end
         local success, err = pcall(function()
             humanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
         end)
