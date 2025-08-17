@@ -433,7 +433,7 @@ local function loadAnimation(humanoid)
     end
 end
 
--- Teleport and follow loop for annoy mode with animation
+-- Teleport and follow loop for annoy mode with animation and size change
 local function annoyTeleportLoop()
     local taskId = task.spawn(function()
         -- Validate target and character
@@ -451,6 +451,17 @@ local function annoyTeleportLoop()
         end)
         if not success then
             sendChatMessage("❌ Initial teleport failed: " .. tostring(err))
+            stopCurrentMode()
+            return
+        end
+
+        -- Make character huge by firing the remote
+        success, err = pcall(function()
+            local args = { [1] = "Huge" }
+            game:GetService("ReplicatedStorage"):WaitForChild("Size Preset", 9e9):FireServer(unpack(args))
+        end)
+        if not success then
+            sendChatMessage("❌ Failed to set character size to Huge: " .. tostring(err))
             stopCurrentMode()
             return
         end
@@ -482,7 +493,6 @@ local function annoyTeleportLoop()
                 -- Move toward desired position at FOLLOW_SPEED
                 if distance > 2 then
                     local maxDistance = FOLLOW_SPEED * deltaTime
-                    smoothMaxDistance = math.min(maxDistance, distance - 2)
                     local moveVector = (desiredPos - myPos)
                     local moveDistance = moveVector.Magnitude
                     local newPos = myPos
@@ -506,7 +516,7 @@ local function annoyTeleportLoop()
                     _G.AnimationTrack:Play()
                 end
             else
-                -- Stop if target becomes invalid or character is dead/falling
+                -- Stop if target becomes invalid or character dead/falling
                 sendChatMessage("❌ Target lost, invalid, or character dead!")
                 break
             end
