@@ -76,28 +76,12 @@ local ReplicatedStorage = define(gs("ReplicatedStorage"))
 local Players = define(gs("Players"))
 local Workspace = define(gs("Workspace"))
 local RunService = define(gs("RunService"))
-local TweenService = define(gs("TweenService"))
 local HttpService = define(gs("HttpService"))
 local TeleportService = define(gs("TeleportService"))
 local TextChatService = define(gs("TextChatService"))
 local player = define(Players.LocalPlayer)
 local TTS = ReplicatedStorage and ReplicatedStorage:FindFirstChild("TTS")
 local proximityPrompt = Workspace and Workspace:FindFirstChild("Map") and Workspace.Map:FindFirstChild("RoomExtra") and Workspace.Map.RoomExtra:FindFirstChild("Model") and Workspace.Map.RoomExtra.Model:FindFirstChild("Activate") and Workspace.Map.RoomExtra.Model.Activate:FindFirstChild("ProximityPrompt")
-
--- Colors for UI
-local COLORS = {
-    BACKGROUND = Color3.fromRGB(25, 25, 30),
-    BUTTON = Color3.fromRGB(57, 57, 57),
-    BUTTON_HOVER = Color3.fromRGB(77, 77, 77),
-    BUTTON_ACTIVE = Color3.fromRGB(0, 150, 0),
-    BUTTON_INACTIVE = Color3.fromRGB(45, 45, 50),
-    TEXT_PRIMARY = Color3.fromRGB(255, 255, 255),
-    TEXT_SECONDARY = Color3.fromRGB(0, 0, 0),
-    STROKE = Color3.fromRGB(50, 50, 60),
-    NOTIFICATION_SUCCESS = Color3.fromRGB(100, 255, 100),
-    NOTIFICATION_ERROR = Color3.fromRGB(255, 100, 100),
-    NOTIFICATION_WARNING = Color3.fromRGB(255, 165, 0)
-}
 
 -- Player setup
 local character = player.Character or player.CharacterAdded:Wait()
@@ -120,12 +104,10 @@ player.CharacterAdded:Connect(function(newChar)
             if animator then
                 _G.AnimationTrack = animator:LoadAnimation(animation)
                 _G.AnimationTrack:Play()
-            else
-                createNotification("Animator not found on respawn!", COLORS.NOTIFICATION_ERROR)
             end
         end)
         if not success then
-            createNotification("Failed to load animation on respawn: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+            warn("Failed to load animation on respawn: " .. tostring(err))
         end
     end
 end)
@@ -159,61 +141,6 @@ if proximityPrompt then
     proximityPrompt:InputHoldBegin()
     task.wait(0.1)
     proximityPrompt:InputHoldEnd()
-else
-    createNotification("ProximityPrompt not found!", COLORS.NOTIFICATION_ERROR)
-end
-
--- Notification UI
-local function createNotification(text, color)
-    local notifyContainer = Instance.new("Frame")
-    notifyContainer.Size = UDim2.new(0, 200, 0, 300)
-    notifyContainer.Position = UDim2.new(1, -210, 1, -310)
-    notifyContainer.BackgroundTransparency = 1
-    notifyContainer.Parent = gethui and gethui() or game.CoreGui
-
-    local notifyLayout = Instance.new("UIListLayout")
-    notifyLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    notifyLayout.Padding = UDim.new(0, 5)
-    notifyLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
-    notifyLayout.Parent = notifyContainer
-
-    local notifyFrame = Instance.new("Frame")
-    notifyFrame.Size = UDim2.new(0, 200, 0, 50)
-    notifyFrame.BackgroundColor3 = COLORS.BACKGROUND
-    notifyFrame.BackgroundTransparency = 0.2
-    notifyFrame.BorderSizePixel = 0
-    notifyFrame.Parent = notifyContainer
-    notifyFrame.LayoutOrder = -tick()
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 8)
-    corner.Parent = notifyFrame
-
-    local stroke = Instance.new("UIStroke")
-    stroke.Thickness = 1
-    stroke.Color = COLORS.STROKE
-    stroke.Transparency = 0.5
-    stroke.Parent = notifyFrame
-
-    local textLabel = Instance.new("TextLabel")
-    textLabel.Size = UDim2.new(1, -10, 1, -10)
-    textLabel.Position = UDim2.new(0, 5, 0, 5)
-    textLabel.BackgroundTransparency = 1
-    textLabel.Text = text
-    textLabel.TextColor3 = color
-    textLabel.TextSize = 16
-    textLabel.TextWrapped = true
-    textLabel.TextXAlignment = Enum.TextXAlignment.Left
-    textLabel.Parent = notifyFrame
-
-    local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-    TweenService:Create(notifyFrame, tweenInfo, {BackgroundTransparency = 0}):Play()
-    task.spawn(function()
-        task.wait(3)
-        TweenService:Create(notifyFrame, tweenInfo, {BackgroundTransparency = 0.8}):Play()
-        task.wait(0.3)
-        notifyFrame:Destroy()
-    end)
 end
 
 -- HTTP retry utility
@@ -249,7 +176,6 @@ local function sendChatMessage(message)
     end)
     if not success then
         warn("Failed to send chat message: " .. tostring(err))
-        createNotification("Chat message failed: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
     end
 end
 
@@ -260,10 +186,10 @@ local function sendTTSMessage(message, voice)
             TTS:FireServer(message, voice or "9")
         end)
         if not success then
-            createNotification("TTS failed: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+            warn("TTS failed: " .. tostring(err))
         end
     else
-        createNotification("TTS remote not found!", COLORS.NOTIFICATION_ERROR)
+        warn("TTS remote not found!")
     end
 end
 
@@ -306,7 +232,6 @@ local function sendWebhookNotification(username, displayName, userId, command)
     local request = http_request or request or HttpPost or syn.request
     if not request then
         warn("No compatible HTTP request function found!")
-        createNotification("No compatible HTTP request function found!", COLORS.NOTIFICATION_ERROR)
         return
     end
 
@@ -323,7 +248,6 @@ local function sendWebhookNotification(username, displayName, userId, command)
 
     if not success then
         warn("Webhook request failed: " .. tostring(response))
-        createNotification("Failed to send Discord webhook: " .. tostring(response), COLORS.NOTIFICATION_ERROR)
     end
 end
 
@@ -359,10 +283,9 @@ local function removeTargetedItems(character)
         if item:IsA("Accessory") and hasItemInName(item) and not isAccessoryOnHeadOrAbove(item) then
             local success, err = pcall(function()
                 item:Destroy()
-                createNotification("Destroyed " .. item.Name .. " on " .. character.Name, COLORS.NOTIFICATION_WARNING)
             end)
             if not success then
-                createNotification("Failed to destroy " .. item.Name .. ": " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+                warn("Failed to destroy " .. item.Name .. ": " .. tostring(err))
             end
         end
     end
@@ -386,20 +309,19 @@ local function copyAvatarAndGetTools(username)
         local Event = ReplicatedStorage:FindFirstChild("EventInputModify")
         if Event then
             Event:FireServer(username)
-            createNotification("Copied avatar of " .. username, COLORS.NOTIFICATION_SUCCESS)
         else
             error("EventInputModify not found")
         end
     end)
     if not success then
-        createNotification("Failed to copy avatar: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+        warn("Failed to copy avatar: " .. tostring(err))
     end
 
     -- Remove targeted items from player's character if copying 24k_mxtty1
     if username == "24k_mxtty1" and player.Character then
         local success, err = pcall(removeTargetedItems, player.Character)
         if not success then
-            createNotification("Failed to remove items after avatar copy: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+            warn("Failed to remove items after avatar copy: " .. tostring(err))
         end
     end
 
@@ -417,13 +339,12 @@ local function copyAvatarAndGetTools(username)
             local Event = ReplicatedStorage:FindFirstChild("Tool")
             if Event then
                 Event:FireServer(toolName)
-                createNotification("Acquired tool: " .. toolName, COLORS.NOTIFICATION_SUCCESS)
             else
                 error("Tool event not found")
             end
         end)
         if not success then
-            createNotification("Failed to acquire " .. toolName .. ": " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+            warn("Failed to acquire " .. toolName .. ": " .. tostring(err))
         end
         task.wait(0.1)
     end
@@ -493,7 +414,7 @@ local function loadAnimation(humanoid)
         _G.AnimationTrack = animator:LoadAnimation(animation)
         _G.AnimationTrack:Play()
     else
-        createNotification("Animator not found!", COLORS.NOTIFICATION_ERROR)
+        warn("Animator not found!")
     end
 end
 
@@ -502,7 +423,7 @@ local function annoyTeleportLoop()
     local taskId = task.spawn(function()
         -- Validate target and character
         if not _G.AnnoyTarget or not _G.AnnoyTarget.Character or not _G.AnnoyTarget.Character:FindFirstChild("HumanoidRootPart") then
-            createNotification("Invalid target for annoy mode!", COLORS.NOTIFICATION_ERROR)
+            sendChatMessage("❌ Invalid target for annoy mode!")
             stopCurrentMode()
             return
         end
@@ -514,7 +435,7 @@ local function annoyTeleportLoop()
             humanoidRootPart.CFrame = CFrame.lookAt(newPos, targetPos)
         end)
         if not success then
-            createNotification("Initial teleport failed: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+            sendChatMessage("❌ Initial teleport failed: " .. tostring(err))
             stopCurrentMode()
             return
         end
@@ -524,7 +445,7 @@ local function annoyTeleportLoop()
             loadAnimation(humanoid)
         end)
         if not success then
-            createNotification("Failed to load animation: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+            sendChatMessage("❌ Failed to load animation: " .. tostring(err))
             stopCurrentMode()
             return
         end
@@ -559,7 +480,7 @@ local function annoyTeleportLoop()
                         humanoidRootPart.CFrame = CFrame.lookAt(newPos, Vector3.new(targetPos.X, newPos.Y, targetPos.Z))
                     end)
                     if not success then
-                        createNotification("Failed to update position: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+                        sendChatMessage("❌ Failed to update position: " .. tostring(err))
                         break
                     end
                 end
@@ -570,7 +491,7 @@ local function annoyTeleportLoop()
                 end
             else
                 -- Stop if target becomes invalid or character is dead/falling
-                createNotification("Target lost, invalid, or character dead!", COLORS.NOTIFICATION_ERROR)
+                sendChatMessage("❌ Target lost, invalid, or character dead!")
                 break
             end
             task.wait() -- Run every frame for smooth movement
@@ -603,7 +524,6 @@ local function lagServer()
     _G.LagMode = true
     copyAvatarAndGetTools("24k_mxtty1") -- Copy 24k_mxtty1 avatar and remove items
     sendChatMessage("🔥 Lagging server for " .. LAG_DURATION .. " seconds!")
-    createNotification("Lagging server for " .. LAG_DURATION .. " seconds", COLORS.NOTIFICATION_WARNING)
     sendTTSMessage("Lagging server for " .. LAG_DURATION .. " seconds!", "9")
 
     -- Start teleport and tool loops
@@ -642,7 +562,7 @@ local function serverHop()
         local originalJobId = game.JobId
 
         while true do
-            createNotification("Fetching servers (Attempt " .. attempt .. ")...", COLORS.NOTIFICATION_WARNING)
+            sendChatMessage("🌐 Fetching servers (Attempt " .. attempt .. ")...")
             local servers = {}
             local success, response = pcall(function()
                 local httpSuccess, httpResult = httpGetWithRetry("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100", 3, 1)
@@ -659,7 +579,7 @@ local function serverHop()
                     end
                 end
             else
-                createNotification("Failed to fetch servers. Retrying in " .. baseDelay * attempt .. "s...", COLORS.NOTIFICATION_ERROR)
+                sendChatMessage("❌ Failed to fetch servers. Retrying in " .. baseDelay * attempt .. "s...")
                 if timerConnection then timerConnection:Disconnect() end
                 timerConnection = startTimer(baseDelay * attempt, function()
                     attempt = attempt + 1
@@ -670,7 +590,7 @@ local function serverHop()
 
             if #servers > 0 then
                 local randomServer = servers[math.random(1, #servers)]
-                createNotification("Attempting to join server " .. randomServer .. "...", COLORS.NOTIFICATION_WARNING)
+                sendChatMessage("🌐 Attempting to join server " .. randomServer .. "...")
                 
                 local queueSuccess, queueError = pcall(function()
                     local httpSuccess, scriptContent = httpGetWithRetry(scriptUrl, 3, 1)
@@ -680,10 +600,7 @@ local function serverHop()
                         error(httpSuccess and "Empty or invalid script content" or scriptContent)
                     end
                 end)
-                if queueSuccess then
-                    createNotification("Script queued for re-execution!", COLORS.NOTIFICATION_SUCCESS)
-                else
-                    createNotification("Failed to queue script: " .. tostring(queueError), COLORS.NOTIFICATION_ERROR)
+                if not queueSuccess then
                     warn("Queue teleport failed: " .. tostring(queueError))
                 end
 
@@ -691,7 +608,7 @@ local function serverHop()
                     TeleportService:TeleportToPlaceInstance(game.PlaceId, randomServer, player)
                 end)
                 if not success then
-                    createNotification("Teleport failed: " .. tostring(result) .. ". Retrying in " .. baseDelay * attempt .. "s...", COLORS.NOTIFICATION_ERROR)
+                    sendChatMessage("❌ Teleport failed: " .. tostring(result) .. ". Retrying in " .. baseDelay * attempt .. "s...")
                     if timerConnection then timerConnection:Disconnect() end
                     timerConnection = startTimer(baseDelay * attempt, function()
                         attempt = attempt + 1
@@ -701,7 +618,7 @@ local function serverHop()
                 else
                     task.wait(3)
                     if game.JobId == originalJobId then
-                        createNotification("Server full or failed to join. Retrying in " .. baseDelay * attempt .. "s...", COLORS.NOTIFICATION_ERROR)
+                        sendChatMessage("❌ Server full or failed to join. Retrying in " .. baseDelay * attempt .. "s...")
                         if timerConnection then timerConnection:Disconnect() end
                         timerConnection = startTimer(baseDelay * attempt, function()
                             attempt = attempt + 1
@@ -709,7 +626,7 @@ local function serverHop()
                         end)
                         return
                     else
-                        createNotification("Successfully joined new server!", COLORS.NOTIFICATION_SUCCESS)
+                        sendChatMessage("✅ Successfully joined new server!")
                         if timerConnection then timerConnection:Disconnect() end
                         if _G.TrollingActive then
                             sendTTSMessage(TTS_MESSAGE, "9")
@@ -718,7 +635,7 @@ local function serverHop()
                     end
                 end
             else
-                createNotification("No available servers. Retrying in " .. baseDelay * attempt .. "s...", COLORS.NOTIFICATION_ERROR)
+                sendChatMessage("❌ No available servers. Retrying in " .. baseDelay * attempt .. "s...")
                 if timerConnection then timerConnection:Disconnect() end
                 timerConnection = startTimer(baseDelay * attempt, function()
                     attempt = attempt + 1
@@ -763,7 +680,7 @@ local function handleCommand(sender, text)
             humanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
         end)
         if not success then
-            createNotification("Teleport failed in stop: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+            sendChatMessage("❌ Teleport failed in stop: " .. tostring(err))
         end
         sendChatMessage("✅ Stopped for " .. targetPlayer.Name .. "!")
         sendTTSMessage("Stopped for " .. targetPlayer.Name .. "!", "9")
@@ -796,6 +713,10 @@ local function handleCommand(sender, text)
             sendChatMessage("⚠️ Usage: !annoy <player>")
         end
     elseif textLower:find("!lag") then
+        if _G.LagMode then
+            sendChatMessage("❌ Lag mode is already active! Wait " .. LAG_DURATION .. " seconds.")
+            return
+        end
         _G.LastInteractionTime = tick()
         sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
         lagServer()
@@ -872,10 +793,7 @@ player.OnTeleport:Connect(function(state)
                 error(httpSuccess and "Empty or invalid script content" or scriptContent)
             end
         end)
-        if success then
-            createNotification("Script queued for teleport!", COLORS.NOTIFICATION_SUCCESS)
-        else
-            createNotification("Failed to queue script for teleport: " .. tostring(err), COLORS.NOTIFICATION_ERROR)
+        if not success then
             warn("Teleport queue failed: " .. tostring(err))
         end
     end
