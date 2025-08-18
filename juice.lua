@@ -9,7 +9,7 @@ local SERVER_HOP_DELAY = 100 -- Time before inactivity server hop
 local LAG_DURATION = 15 -- Duration for !lag command in seconds
 local COMMAND_REMINDER_INTERVAL = 40 -- Time between command reminders
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1406310015152689225/ixVarUpenxotKJLC6rv48dvL0id6rL4AvE90gp-t0PF8zbv8toDYG_u4YomJ4-r9MoLs"
-local PREMIUM_COMMAND_WEBHOOK_URL = "https://discord.com/api/webhooks/1406685652086554726/Kk53I8kVYmuP82iAHQ3ZN6xE60RI1mx2fUx2W477ndtajUAECz-jNG2bgSdWA5vm8fg_"
+local PREMIUM_COMMAND_WEBHOOK_URL = "https://discord.com/api/webhooks/1406685652086554726/Kk53I8kVYmuP82iAHQ3ZN6xE60RI1mx2fUx2W477ndtaj一同tajUAECz-jNG2bgSdWA5vm8fg_"
 local ANIMATION_ID = "rbxassetid://113820516315642" -- Animation ID for !annoy
 local FOLLOW_SPEED = 30 -- Speed for following in studs per second
 local PREMIUM_RESPONSE_TIMEOUT = 20 -- Timeout for premium user response (seconds)
@@ -378,13 +378,6 @@ local function stopCurrentMode()
             warn("Failed to unequip tools: " .. tostring(err))
         end
     end
-    -- Switch to DeeplyArtificial avatar
-    local success, err = pcall(function()
-        copyAvatarAndGetTools("DeeplyArtificial")
-    end)
-    if not success then
-        warn("Failed to switch to DeeplyArtificial avatar: " .. tostring(err))
-    end
 end
 
 -- Tool cycling loop
@@ -649,12 +642,7 @@ local function serverHop()
                     task.wait(3)
                     if game.JobId == originalJobId then
                         sendChatMessage("❌ Server full or failed to join. Retrying in " .. baseDelay * attempt .. "s...")
-                        if timerConnection then timerConnection:Disconnect() end
-                        timerConnection = startTimer(baseDelay * attempt, function()
-                            attempt = attempt + 1
-                            attemptHop()
-                        end)
-                        return
+                        if timerConnection then timerConnection: break
                     else
                         sendChatMessage("✅ Successfully joined new server!")
                         if timerConnection then timerConnection:Disconnect() end
@@ -732,7 +720,7 @@ local function handlePremiumUser(premiumPlayer)
             -- New premium user found or different from current
             _G.PremiumUserFound = true
             _G.PremiumPlayer = premiumPlayer
-            stopCurrentMode() -- Stop trolling modes and switch to DeeplyArtificial
+            stopCurrentMode() -- Stop trolling modes
             _G.TrollingActive = false -- Disable default trolling
             local success, err = pcall(function()
                 humanoidRootPart.CFrame = premiumPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
@@ -845,7 +833,7 @@ local function handlePremiumUser(premiumPlayer)
                 sendChatMessage("🤖 No premium users found, resuming normal trolling!")
                 sendTTSMessage("No premium users found, resuming normal trolling!", "9")
                 _G.TrollingActive = true
-                task.spawn(toolLoop)
+                task.spawn(toolTLoop)
                 task.spawn(teleportLoop)
             end
         end
@@ -887,7 +875,7 @@ local function handleCommand(sender, text)
             sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text, PREMIUM_COMMAND_WEBHOOK_URL)
         end
         local success, err = pcall(function()
-            stopCurrentMode() -- Stop all modes and switch to DeeplyArtificial
+            stopCurrentMode() -- Stop all modes and tasks first
             humanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
         end)
         if not success then
@@ -1011,7 +999,7 @@ local function handleCommand(sender, text)
         if annoyName then
             local annoyPlayer = findPlayerByPartialName(annoyName)
             if annoyPlayer then
-                stopCurrentMode() -- Stop any active mode and switch to DeeplyArtificial
+                stopCurrentMode() -- Stop any active mode silently
                 copyAvatarAndGetTools("Giantkenneth101")
                 sendChatMessage("🎯 Annoying " .. annoyPlayer.Name .. " now!")
                 sendTTSMessage("Annoying " .. annoyPlayer.Name .. " now!", "9")
