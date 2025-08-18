@@ -1,18 +1,19 @@
 -- Configuration
-local ALLOW_SELF_COMMANDS = false -- Set to true to allow the bot to process commands from itself (for troubleshooting)
-local PREMIUM_LIST_URL = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/premium.lua" -- URL to Lua file with premium usernames
-local TELEPORT_DELAY = 0.05 -- Time between teleports to each player
+local ALLOW_SELF_COMMANDS = true
+local PREMIUM_LIST_URL = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/premium.lua"
+local TELEPORT_DELAY = 0.05
 local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew "
-local ANNOY_TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew " -- Custom TTS for !annoy
-local TOOL_CYCLE_DELAY = 0.1 -- Time between equipping/unequipping tools
-local SERVER_HOP_DELAY = 100 -- Time before inactivity server hop
-local LAG_DURATION = 15 -- Duration for !lag command in seconds
-local COMMAND_REMINDER_INTERVAL = 40 -- Time between command reminders
+local ANNOY_TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew "
+local TOOL_CYCLE_DELAY = 0.1
+local SERVER_HOP_DELAY = 100
+local LAG_DURATION = 15
+local COMMAND_REMINDER_INTERVAL = 40
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1406310015152689225/ixVarUpenxotKJLC6rv48dvL0id6rL4AvE90gp-t0PF8zbv8toDYG_u4YomJ4-r9MoLs"
 local PREMIUM_COMMAND_WEBHOOK_URL = "https://discord.com/api/webhooks/1406685652086554726/Kk53I8kVYmuP82iAHQ3ZN6xE60RI1mx2fUx2W477ndtajUAECz-jNG2bgSdWA5vm8fg_"
-local ANIMATION_ID = "rbxassetid://113820516315642" -- Animation ID for !annoy
-local FOLLOW_SPEED = 30 -- Speed for following in studs per second
-local PREMIUM_RESPONSE_TIMEOUT = 20 -- Timeout for premium user response (seconds)
+local ANIMATION_ID = "rbxassetid://113820516315642"
+local ROAST_ANIMATION_ID = "rbxassetid://82965632072615"
+local FOLLOW_SPEED = 30
+local PREMIUM_RESPONSE_TIMEOUT = 20
 
 -- Prevent multiple executions
 if _G.TrollScriptExecuted then
@@ -25,13 +26,15 @@ _G.TrollScriptExecuted = true
 _G.TrollingActive = true
 _G.AnnoyMode = false
 _G.LagMode = false
+_G.RoastMode = false
 _G.AnnoyTarget = nil
+_G.RoastTarget = nil
 _G.LastInteractionTime = tick()
-_G.AnimationTrack = nil -- To store the animation track
-_G.ActiveTasks = {} -- To store active tasks for cancellation
-_G.PremiumUserFound = false -- Flag to track if a premium user is in the server
-_G.PremiumPlayer = nil -- Store the premium player object
-_G.WaitingForPremiumResponse = false -- Flag to track if waiting for premium user response
+_G.AnimationTrack = nil
+_G.ActiveTasks = {}
+_G.PremiumUserFound = false
+_G.PremiumPlayer = nil
+_G.WaitingForPremiumResponse = false
 
 -- Utility functions
 local function randomHex(len)
@@ -53,8 +56,38 @@ local function randstr()
     return "Troll_" .. uuid
 end
 
+local function generateRoastMessage(target)
+    local roastMessages = {
+        "Imagine wearing %s, did you pay LOL? 🤡",
+        "ew what is %s, are we seriously still wearing this in big 2025? 🤡",
+        "Wearing %s? Bruh wasting money at this point 🤡",
+        "Is %s supposed to be tuff or a cry for help? 🤡",
+        "%s looks like it was the reason they replaced you 🤡"
+    }
+    local accessories = {}
+    if target.Character then
+        for _, item in ipairs(target.Character:GetChildren()) do
+            if item:IsA("Accessory") then
+                local accessoryName = item.Name
+                -- Clean up accessory name
+                if accessoryName:find("Accessory") then
+                    accessoryName = accessoryName:gsub("Accessory%s*%(?([^%)]+)%)?", "%1") -- Remove "Accessory" and parentheses
+                    accessoryName = accessoryName:gsub("^%s*(.-)%s*$", "%1") -- Trim whitespace
+                end
+                if accessoryName == "MeshPartAccessory" then
+                    accessoryName = "That"
+                end
+                table.insert(accessories, accessoryName)
+            end
+        end
+    end
+    local accessoryName = #accessories > 0 and accessories[math.random(1, #accessories)] or "outfit"
+    local message = roastMessages[math.random(1, #roastMessages)]
+    return string.format(message, accessoryName)
+end
+
 local GUI_ID = randstr()
-local scriptUrl = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/juice.lua" -- Ensure this URL is correct
+local scriptUrl = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/juice.lua"
 
 -- Executor compatibility
 local queueTeleport = (syn and syn.queue_on_teleport) or
@@ -96,13 +129,14 @@ local humanoid = character:WaitForChild("Humanoid")
 -- Animation setup
 local animation = Instance.new("Animation")
 animation.AnimationId = ANIMATION_ID
+local roastAnimation = Instance.new("Animation")
+roastAnimation.AnimationId = ROAST_ANIMATION_ID
 
 -- Handle character respawn
 player.CharacterAdded:Connect(function(newChar)
     character = newChar
     humanoidRootPart = newChar:WaitForChild("HumanoidRootPart")
     humanoid = newChar:WaitForChild("Humanoid")
-    -- Reload animation on character respawn
     if _G.AnnoyMode and _G.AnnoyTarget then
         local success, err = pcall(function()
             local animator = humanoid:FindFirstChildOfClass("Animator")
@@ -112,7 +146,18 @@ player.CharacterAdded:Connect(function(newChar)
             end
         end)
         if not success then
-            warn("Failed to load animation on respawn: " .. tostring(err))
+            warn("Failed to load annoy animation on respawn: " .. tostring(err))
+        end
+    elseif _G.RoastMode and _G.RoastTarget then
+        local success, err = pcall(function()
+            local animator = humanoid:FindFirstChildOfClass("Animator")
+            if animator then
+                _G.AnimationTrack = animator:LoadAnimation(roastAnimation)
+                _G.AnimationTrack:Play()
+            end
+        end)
+        if not success then
+            warn("Failed to load roast animation on respawn: " .. tostring(err))
         end
     end
 end)
@@ -138,7 +183,6 @@ local function findProximityPrompt()
 end
 proximityPrompt = proximityPrompt or findProximityPrompt()
 
--- Activate proximity prompt
 if proximityPrompt then
     local promptPos = proximityPrompt.Parent.Position
     humanoidRootPart.CFrame = CFrame.new(promptPos + Vector3.new(2, 0, 0))
@@ -226,7 +270,7 @@ local function sendWebhookNotification(username, displayName, userId, command, w
             description = command == "PremiumUserFound" and
                 string.format("**Username**: %s\n**Display Name**: %s", username, displayName) or
                 string.format("**Username**: %s\n**Display Name**: %s\n**Command**: `%s`", username, displayName, command),
-            color = tonumber("0xFF0000"), -- Red color
+            color = tonumber("0xFF0000"),
             thumbnail = { url = playerPfpUrl },
             footer = { text = string.format("Date: %s | Time: %s", date, time) }
         }}
@@ -321,7 +365,6 @@ local function copyAvatarAndGetTools(username)
         warn("Failed to copy avatar: " .. tostring(err))
     end
 
-    -- Remove targeted items from player's character if copying 24k_mxtty1
     if username == "24k_mxtty1" and player.Character then
         local success, err = pcall(removeTargetedItems, player.Character)
         if not success then
@@ -359,7 +402,9 @@ local function stopCurrentMode()
     _G.TrollingActive = false
     _G.AnnoyMode = false
     _G.LagMode = false
+    _G.RoastMode = false
     _G.AnnoyTarget = nil
+    _G.RoastTarget = nil
     if _G.AnimationTrack then
         _G.AnimationTrack:Stop()
         _G.AnimationTrack = nil
@@ -368,7 +413,6 @@ local function stopCurrentMode()
         pcall(task.cancel, taskId)
     end
     _G.ActiveTasks = {}
-    -- Unequip all tools
     if humanoid then
         local success, err = pcall(function()
             humanoid:UnequipTools()
@@ -421,10 +465,10 @@ local function teleportLoop()
 end
 
 -- Animation loading function
-local function loadAnimation(humanoid)
+local function loadAnimation(humanoid, anim)
     local animator = humanoid:FindFirstChildOfClass("Animator")
     if animator then
-        _G.AnimationTrack = animator:LoadAnimation(animation)
+        _G.AnimationTrack = animator:LoadAnimation(anim)
         _G.AnimationTrack:Play()
     else
         warn("Animator not found!")
@@ -434,14 +478,12 @@ end
 -- Teleport and follow loop for annoy mode with animation and size change
 local function annoyTeleportLoop()
     local taskId = task.spawn(function()
-        -- Validate target and character
         if not _G.AnnoyTarget or not _G.AnnoyTarget.Character or not _G.AnnoyTarget.Character:FindFirstChild("HumanoidRootPart") then
             sendChatMessage("❌ Invalid target for annoy mode!")
             stopCurrentMode()
             return
         end
 
-        -- Fire SizePreset remote to make character huge
         local success, err = pcall(function()
             local args = { [1] = "Huge" }
             game:GetService("ReplicatedStorage"):WaitForChild("SizePreset"):FireServer(unpack(args))
@@ -450,7 +492,6 @@ local function annoyTeleportLoop()
             sendChatMessage("❌ Failed to set character size to Huge: " .. tostring(err))
         end
 
-        -- Initial teleport to target
         success, err = pcall(function()
             local targetPos = _G.AnnoyTarget.Character.HumanoidRootPart.Position
             local newPos = targetPos + (targetPos - humanoidRootPart.Position).Unit * 2
@@ -462,9 +503,8 @@ local function annoyTeleportLoop()
             return
         end
 
-        -- Load and play animation
         success, err = pcall(function()
-            loadAnimation(humanoid)
+            loadAnimation(humanoid, animation)
         end)
         if not success then
             sendChatMessage("❌ Failed to load animation: " .. tostring(err))
@@ -472,7 +512,6 @@ local function annoyTeleportLoop()
             return
         end
 
-        -- Follow target by interpolating position
         local lastUpdate = tick()
         while _G.AnnoyMode do
             if _G.AnnoyTarget and _G.AnnoyTarget.Character and _G.AnnoyTarget.Character:FindFirstChild("HumanoidRootPart") and humanoid and humanoid.Health > 0 and humanoid:GetState() ~= Enum.HumanoidStateType.FallingDown then
@@ -482,11 +521,9 @@ local function annoyTeleportLoop()
                 local deltaTime = tick() - lastUpdate
                 lastUpdate = tick()
 
-                -- Calculate target position 2 studs away
                 local direction = (targetPos - myPos).Unit
                 local desiredPos = targetPos - direction * 2
 
-                -- Move toward desired position at FOLLOW_SPEED
                 if distance > 2 then
                     local maxDistance = FOLLOW_SPEED * deltaTime
                     local moveVector = (desiredPos - myPos)
@@ -507,19 +544,16 @@ local function annoyTeleportLoop()
                     end
                 end
 
-                -- Ensure animation is playing
                 if _G.AnimationTrack and not _G.AnimationTrack.IsPlaying then
                     _G.AnimationTrack:Play()
                 end
             else
-                -- Stop if target becomes invalid or character is dead/falling
                 sendChatMessage("❌ Target lost, invalid, or character dead!")
                 break
             end
-            task.wait() -- Run every frame for smooth movement
+            task.wait()
         end
 
-        -- Clean up when annoy mode ends
         if _G.AnimationTrack then
             _G.AnimationTrack:Stop()
             _G.AnimationTrack = nil
@@ -540,19 +574,110 @@ local function annoyTTSLoop()
     table.insert(_G.ActiveTasks, taskId)
 end
 
+-- Teleport and follow loop for roast mode
+local function roastTeleportLoop()
+    local taskId = task.spawn(function()
+        if not _G.RoastTarget or not _G.RoastTarget.Character or not _G.RoastTarget.Character:FindFirstChild("HumanoidRootPart") then
+            sendChatMessage("❌ Invalid target for roast mode!")
+            stopCurrentMode()
+            return
+        end
+
+        local success, err = pcall(function()
+            local targetPos = _G.RoastTarget.Character.HumanoidRootPart.Position
+            local newPos = targetPos + (targetPos - humanoidRootPart.Position).Unit * 2
+            humanoidRootPart.CFrame = CFrame.lookAt(newPos, targetPos)
+        end)
+        if not success then
+            sendChatMessage("❌ Initial teleport failed: " .. tostring(err))
+            stopCurrentMode()
+            return
+        end
+
+        success, err = pcall(function()
+            loadAnimation(humanoid, roastAnimation)
+        end)
+        if not success then
+            sendChatMessage("❌ Failed to load roast animation: " .. tostring(err))
+            stopCurrentMode()
+            return
+        end
+
+        local startTime = tick()
+        local lastUpdate = tick()
+        while _G.RoastMode and (tick() - startTime < 10) do
+            if _G.RoastTarget and _G.RoastTarget.Character and _G.RoastTarget.Character:FindFirstChild("HumanoidRootPart") and humanoid and humanoid.Health > 0 and humanoid:GetState() ~= Enum.HumanoidStateType.FallingDown then
+                local targetPos = _G.RoastTarget.Character.HumanoidRootPart.Position
+                local myPos = humanoidRootPart.Position
+                local distance = (targetPos - myPos).Magnitude
+                local deltaTime = tick() - lastUpdate
+                lastUpdate = tick()
+
+                local direction = (targetPos - myPos).Unit
+                local desiredPos = targetPos - direction * 2
+
+                if distance > 2 then
+                    local maxDistance = FOLLOW_SPEED * deltaTime
+                    local moveVector = (desiredPos - myPos)
+                    local moveDistance = moveVector.Magnitude
+                    local newPos = myPos
+                    if moveDistance > maxDistance then
+                        newPos = myPos + moveVector.Unit * maxDistance
+                    else
+                        newPos = desiredPos
+                    end
+
+                    success, err = pcall(function()
+                        humanoidRootPart.CFrame = CFrame.lookAt(newPos, Vector3.new(targetPos.X, newPos.Y, targetPos.Z))
+                    end)
+                    if not success then
+                        sendChatMessage("❌ Failed to update position: " .. tostring(err))
+                        break
+                    end
+                end
+
+                if _G.AnimationTrack and not _G.AnimationTrack.IsPlaying then
+                    _G.AnimationTrack:Play()
+                end
+            else
+                sendChatMessage("❌ Target lost, invalid, or character dead!")
+                break
+            end
+            task.wait()
+        end
+
+        if _G.AnimationTrack then
+            _G.AnimationTrack:Stop()
+            _G.AnimationTrack = nil
+        end
+        stopCurrentMode()
+    end)
+    table.insert(_G.ActiveTasks, taskId)
+end
+
+-- Roast message function (single message)
+local function roastMessageLoop()
+    local taskId = task.spawn(function()
+        if _G.RoastTarget then
+            local roastMessage = generateRoastMessage(_G.RoastTarget)
+            sendChatMessage(roastMessage)
+            sendTTSMessage(roastMessage, "9")
+        end
+    end)
+    table.insert(_G.ActiveTasks, taskId)
+end
+
 -- Lag server function
 local function lagServer()
-    stopCurrentMode() -- Stop any active mode silently
+    stopCurrentMode()
     _G.LagMode = true
-    copyAvatarAndGetTools("24k_mxtty1") -- Copy 24k_mxtty1 avatar and remove items
+    copyAvatarAndGetTools("24k_mxtty1")
     sendChatMessage("🔥 Lagging server for " .. LAG_DURATION .. " seconds!")
     sendTTSMessage("Lagging server for " .. LAG_DURATION .. " seconds!", "9")
 
-    -- Start teleport and tool loops
     local teleportTask = task.spawn(teleportLoop)
     local toolTask = task.spawn(toolLoop)
 
-    -- Run for LAG_DURATION, then stop
     local lagTask = task.spawn(function()
         task.wait(LAG_DURATION)
         stopCurrentMode()
@@ -697,7 +822,6 @@ local function checkPremiumUsers()
     for _, plr in ipairs(Players:GetPlayers()) do
         for _, premiumName in ipairs(premiumUsers) do
             if plr.Name:lower() == premiumName:lower() then
-                -- Send webhook notification for premium user found
                 sendWebhookNotification(plr.Name, plr.DisplayName, plr.UserId, "PremiumUserFound", PREMIUM_COMMAND_WEBHOOK_URL)
                 return plr
             end
@@ -723,10 +847,8 @@ local function handleCommand(sender, text)
     local targetPlayer = Players:GetPlayerByUserId(sender.UserId) or Players:FindFirstChild(sender.Name)
     if not targetPlayer then return end
 
-    -- Only process commands starting with "!"
     if not textLower:find("^!") then return end
 
-    -- Block commands while waiting for premium user response
     if _G.WaitingForPremiumResponse then
         sendChatMessage("⏳ Please wait, I'm awaiting a response from the premium user.")
         return
@@ -739,7 +861,7 @@ local function handleCommand(sender, text)
             sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text, PREMIUM_COMMAND_WEBHOOK_URL)
         end
         local success, err = pcall(function()
-            stopCurrentMode() -- Stop all modes and tasks first
+            stopCurrentMode()
             humanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
         end)
         if not success then
@@ -753,9 +875,7 @@ local function handleCommand(sender, text)
         if _G.PremiumPlayer and targetPlayer == _G.PremiumPlayer then
             sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text, PREMIUM_COMMAND_WEBHOOK_URL)
         end
-        -- Check if premium user is present and sender is not premium
         if _G.PremiumUserFound and targetPlayer ~= _G.PremiumPlayer then
-            -- Teleport to premium user
             local success, err = pcall(function()
                 humanoidRootPart.CFrame = _G.PremiumPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
             end)
@@ -763,12 +883,10 @@ local function handleCommand(sender, text)
                 sendChatMessage("❌ Failed to teleport to premium user " .. _G.PremiumPlayer.Name .. ": " .. tostring(err))
                 return
             end
-            -- Ask premium user for permission to server hop
-            _G.WaitingForPremiumResponse = true -- Set flag before prompting
+            _G.WaitingForPremiumResponse = true
             sendChatMessage("❓ " .. _G.PremiumPlayer.Name .. ", " .. targetPlayer.Name .. " wants to server hop. Should I hop? Answer with 'yes' or 'no'.")
             sendTTSMessage(_G.PremiumPlayer.Name .. ", " .. targetPlayer.Name .. " wants to server hop. Should I hop? Answer with yes or no.", "9")
 
-            -- Temporary chat listener for premium user response
             local responseReceived = false
             local connection
             local startTime = tick()
@@ -782,14 +900,14 @@ local function handleCommand(sender, text)
                             if textLower == "yes" then
                                 responseReceived = true
                                 connection:Disconnect()
-                                _G.WaitingForPremiumResponse = false -- Reset flag
+                                _G.WaitingForPremiumResponse = false
                                 sendChatMessage("🌐 " .. _G.PremiumPlayer.Name .. " said yes, hopping servers!")
                                 sendTTSMessage(_G.PremiumPlayer.Name .. " said yes, hopping servers!", "9")
                                 serverHop()
                             elseif textLower == "no" then
                                 responseReceived = true
                                 connection:Disconnect()
-                                _G.WaitingForPremiumResponse = false -- Reset flag
+                                _G.WaitingForPremiumResponse = false
                                 sendChatMessage("✅ " .. _G.PremiumPlayer.Name .. " said no, staying in server!")
                                 sendTTSMessage(_G.PremiumPlayer.Name .. " said no, staying in server!", "9")
                             end
@@ -806,14 +924,14 @@ local function handleCommand(sender, text)
                             if textLower == "yes" then
                                 responseReceived = true
                                 connection:Disconnect()
-                                _G.WaitingForPremiumResponse = false -- Reset flag
+                                _G.WaitingForPremiumResponse = false
                                 sendChatMessage("🌐 " .. _G.PremiumPlayer.Name .. " said yes, hopping servers!")
                                 sendTTSMessage(_G.PremiumPlayer.Name .. " said yes, hopping servers!", "9")
                                 serverHop()
                             elseif textLower == "no" then
                                 responseReceived = true
                                 connection:Disconnect()
-                                _G.WaitingForPremiumResponse = false -- Reset flag
+                                _G.WaitingForPremiumResponse = false
                                 sendChatMessage("✅ " .. _G.PremiumPlayer.Name .. " said no, staying in server!")
                                 sendTTSMessage(_G.PremiumPlayer.Name .. " said no, staying in server!", "9")
                             end
@@ -822,17 +940,16 @@ local function handleCommand(sender, text)
                 end)
             end
 
-            -- Timeout for no response or premium player leaving
             task.spawn(function()
                 while tick() - startTime < PREMIUM_RESPONSE_TIMEOUT and not responseReceived do
-                    if not _G.PremiumPlayer.Parent then -- Check if premium player left
+                    if not _G.PremiumPlayer.Parent then
                         responseReceived = true
                         if connection then connection:Disconnect() end
                         sendChatMessage("❌ Premium user " .. _G.PremiumPlayer.Name .. " left, hopping servers!")
                         sendTTSMessage("Premium user " .. _G.PremiumPlayer.Name .. " left, hopping servers!", "9")
                         _G.PremiumUserFound = false
                         _G.PremiumPlayer = nil
-                        _G.WaitingForPremiumResponse = false -- Reset flag
+                        _G.WaitingForPremiumResponse = false
                         serverHop()
                         return
                     end
@@ -842,12 +959,11 @@ local function handleCommand(sender, text)
                     if connection then connection:Disconnect() end
                     sendChatMessage("⏰ No response from " .. _G.PremiumPlayer.Name .. ", hopping servers!")
                     sendTTSMessage("No response from " .. _G.PremiumPlayer.Name .. ", hopping servers!", "9")
-                    _G.WaitingForPremiumResponse = false -- Reset flag
+                    _G.WaitingForPremiumResponse = false
                     serverHop()
                 end
             end)
         else
-            -- No premium user or sender is premium, hop immediately
             sendChatMessage("🌐 Hopping servers now!")
             sendTTSMessage("Hopping servers now!", "9")
             task.wait(3)
@@ -863,7 +979,7 @@ local function handleCommand(sender, text)
         if annoyName then
             local annoyPlayer = findPlayerByPartialName(annoyName)
             if annoyPlayer then
-                stopCurrentMode() -- Stop any active mode silently
+                stopCurrentMode()
                 copyAvatarAndGetTools("Giantkenneth101")
                 sendChatMessage("🎯 Annoying " .. annoyPlayer.Name .. " now!")
                 sendTTSMessage("Annoying " .. annoyPlayer.Name .. " now!", "9")
@@ -903,6 +1019,28 @@ local function handleCommand(sender, text)
             sendChatMessage("🌟 Premium users get special treatment! They prevent the server from lagging, friend me to be whitelisted!")
             sendTTSMessage("Premium users get special treatment! They prevent the server from lagging, friend me to be whitelisted!", "9")
         end
+    elseif textLower:find("!roast") then
+        _G.LastInteractionTime = tick()
+        sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
+        if _G.PremiumPlayer and targetPlayer == _G.PremiumPlayer then
+            sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text, PREMIUM_COMMAND_WEBHOOK_URL)
+        end
+        local roastName = textLower:match("!roast%s*(.+)")
+        if roastName then
+            local roastPlayer = findPlayerByPartialName(roastName)
+            if roastPlayer then
+                stopCurrentMode()
+                copyAvatarAndGetTools("Aquilesfgj_YT")
+                _G.RoastMode = true
+                _G.RoastTarget = roastPlayer
+                task.spawn(roastTeleportLoop)
+                task.spawn(roastMessageLoop)
+            else
+                sendChatMessage("❌ No player found matching '" .. roastName .. "'.")
+            end
+        else
+            sendChatMessage("⚠️ Usage: !roast user/display doesnt need to be fully typed")
+        end
     end
 end
 
@@ -910,7 +1048,7 @@ end
 task.spawn(function()
     task.wait(COMMAND_REMINDER_INTERVAL)
     while true do
-        sendChatMessage("🤖 CLANKER JOINED | Use these Commands, !stop | !hop | !annoy user | !lag | !premium")
+        sendChatMessage("🤖 CLANKER JOINED | Use these Commands, !stop | !hop | !annoy user | !lag | !premium | !roast user")
         task.wait(COMMAND_REMINDER_INTERVAL)
     end
 end)
@@ -918,14 +1056,13 @@ end)
 -- Initialize loops and TTS on join
 task.spawn(function()
     task.wait(2)
-    copyAvatarAndGetTools("24k_mxtty1") -- Copy 24k_mxtty1 avatar and remove items
+    copyAvatarAndGetTools("24k_mxtty1")
 
-    -- Check for premium users
     local premiumPlayer = checkPremiumUsers()
     if premiumPlayer and premiumPlayer.Character and premiumPlayer.Character:FindFirstChild("HumanoidRootPart") then
         _G.PremiumUserFound = true
         _G.PremiumPlayer = premiumPlayer
-        _G.TrollingActive = false -- Disable default trolling
+        _G.TrollingActive = false
         local success, err = pcall(function()
             humanoidRootPart.CFrame = premiumPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
         end)
@@ -937,13 +1074,11 @@ task.spawn(function()
             sendChatMessage("❌ Failed to teleport to premium user " .. premiumPlayer.Name .. ".")
         end
 
-        -- Ask for server hop permission
         task.wait(2)
-        _G.WaitingForPremiumResponse = true -- Set flag before prompting
+        _G.WaitingForPremiumResponse = true
         sendChatMessage("❓ " .. premiumPlayer.Name .. ", do you want me to server hop? Answer with 'yes' or 'no'.")
         sendTTSMessage(premiumPlayer.Name .. ", do you want me to server hop? Answer with yes or no.", "9")
 
-        -- Temporary chat listener for premium user response
         local responseReceived = false
         local connection
         local startTime = tick()
@@ -957,17 +1092,16 @@ task.spawn(function()
                         if textLower == "yes" then
                             responseReceived = true
                             connection:Disconnect()
-                            _G.WaitingForPremiumResponse = false -- Reset flag
+                            _G.WaitingForPremiumResponse = false
                             sendChatMessage("🌐 " .. premiumPlayer.Name .. " said yes, hopping servers!")
                             sendTTSMessage(premiumPlayer.Name .. " said yes, hopping servers!", "9")
                             serverHop()
                         elseif textLower == "no" then
                             responseReceived = true
                             connection:Disconnect()
-                            _G.WaitingForPremiumResponse = false -- Reset flag
+                            _G.WaitingForPremiumResponse = false
                             sendChatMessage("✅ " .. premiumPlayer.Name .. " said no, staying in server!")
                             sendTTSMessage(premiumPlayer.Name .. " said no, staying in server!", "9")
-                            -- Bot stays, waits for commands, and relies on inactivity check
                         end
                     end
                 end)
@@ -982,34 +1116,32 @@ task.spawn(function()
                         if textLower == "yes" then
                             responseReceived = true
                             connection:Disconnect()
-                            _G.WaitingForPremiumResponse = false -- Reset flag
+                            _G.WaitingForPremiumResponse = false
                             sendChatMessage("🌐 " .. premiumPlayer.Name .. " said yes, hopping servers!")
                             sendTTSMessage(premiumPlayer.Name .. " said yes, hopping servers!", "9")
                             serverHop()
                         elseif textLower == "no" then
                             responseReceived = true
                             connection:Disconnect()
-                            _G.WaitingForPremiumResponse = false -- Reset flag
+                            _G.WaitingForPremiumResponse = false
                             sendChatMessage("✅ " .. premiumPlayer.Name .. " said no, staying in server!")
                             sendTTSMessage(premiumPlayer.Name .. " said no, staying in server!", "9")
-                            -- Bot stays, waits for commands, and relies on inactivity check
                         end
                     end
                 end
             end)
         end
 
-        -- Timeout for no response or player leaving
         task.spawn(function()
             while tick() - startTime < PREMIUM_RESPONSE_TIMEOUT and not responseReceived do
-                if not premiumPlayer.Parent then -- Check if premium player left
+                if not premiumPlayer.Parent then
                     responseReceived = true
                     if connection then connection:Disconnect() end
                     sendChatMessage("❌ Premium user " .. premiumPlayer.Name .. " left, hopping servers!")
                     sendTTSMessage("Premium user " .. premiumPlayer.Name .. " left, hopping servers!", "9")
                     _G.PremiumUserFound = false
                     _G.PremiumPlayer = nil
-                    _G.WaitingForPremiumResponse = false -- Reset flag
+                    _G.WaitingForPremiumResponse = false
                     serverHop()
                     return
                 end
@@ -1019,13 +1151,13 @@ task.spawn(function()
                 if connection then connection:Disconnect() end
                 sendChatMessage("⏰ No response from " .. premiumPlayer.Name .. ", hopping servers!")
                 sendTTSMessage("No response from " .. premiumPlayer.Name .. ", hopping servers!", "9")
-                _G.WaitingForPremiumResponse = false -- Reset flag
+                _G.WaitingForPremiumResponse = false
                 serverHop()
             end
         end)
     else
         warn("No premium users found, proceeding with normal trolling.")
-        sendChatMessage("🤖 CLANKER JOINED | Use these Commands, !stop | !hop | !annoy user | !lag | !premium")
+        sendChatMessage("🤖 CLANKER JOINED | Use these Commands, !stop | !hop | !annoy user | !lag | !premium | !roast user")
         if _G.TrollingActive then
             sendTTSMessage(TTS_MESSAGE, "9")
         end
@@ -1040,7 +1172,6 @@ task.spawn(function()
     while true do
         task.wait(1)
         if _G.PremiumUserFound and _G.PremiumPlayer then
-            -- Check if premium player is still in the server
             if not _G.PremiumPlayer.Parent then
                 _G.PremiumUserFound = false
                 _G.PremiumPlayer = nil
