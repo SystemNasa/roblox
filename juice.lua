@@ -836,7 +836,6 @@ local function handlePremiumUser(premiumPlayer)
                 end
             end)
         end
- Beethoven
     else
         -- No premium user found, resume trolling if not already trolling
         if _G.PremiumUserFound then
