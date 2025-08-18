@@ -14,7 +14,6 @@ local ANIMATION_ID = "rbxassetid://113820516315642" -- Animation ID for !annoy
 local FOLLOW_SPEED = 30 -- Speed for following in studs per second
 local PREMIUM_RESPONSE_TIMEOUT = 20 -- Timeout for premium user response (seconds)
 local PREMIUM_CHECK_INTERVAL = 10 -- Interval for checking premium users (seconds)
-local DEFAULT_AVATAR_USERNAME = "DeeplyArtificial" -- Default avatar username for idle states
 
 -- Prevent multiple executions
 if _G.TrollScriptExecuted then
@@ -116,9 +115,6 @@ player.CharacterAdded:Connect(function(newChar)
         if not success then
             warn("Failed to load animation on respawn: " .. tostring(err))
         end
-    elseif not _G.TrollingActive and not _G.AnnoyMode and not _G.LagMode then
-        -- Copy default avatar on respawn if idle
-        copyAvatarAndGetTools(DEFAULT_AVATAR_USERNAME)
     end
 end)
 
@@ -382,8 +378,13 @@ local function stopCurrentMode()
             warn("Failed to unequip tools: " .. tostring(err))
         end
     end
-    -- Copy default avatar
-    copyAvatarAndGetTools(DEFAULT_AVATAR_USERNAME)
+    -- Switch to DeeplyArtificial avatar
+    local success, err = pcall(function()
+        copyAvatarAndGetTools("DeeplyArtificial")
+    end)
+    if not success then
+        warn("Failed to switch to DeeplyArtificial avatar: " .. tostring(err))
+    end
 end
 
 -- Tool cycling loop
@@ -549,7 +550,7 @@ end
 
 -- Lag server function
 local function lagServer()
-    stopCurrentMode() -- Stop any active mode silently and revert to default avatar
+    stopCurrentMode() -- Stop any active mode silently
     _G.LagMode = true
     copyAvatarAndGetTools("24k_mxtty1") -- Copy 24k_mxtty1 avatar and remove items
     sendChatMessage("🔥 Lagging server for " .. LAG_DURATION .. " seconds!")
@@ -731,7 +732,8 @@ local function handlePremiumUser(premiumPlayer)
             -- New premium user found or different from current
             _G.PremiumUserFound = true
             _G.PremiumPlayer = premiumPlayer
-            stopCurrentMode() -- Stop trolling modes and revert to default avatar
+            stopCurrentMode() -- Stop trolling modes and switch to DeeplyArtificial
+            _G.TrollingActive = false -- Disable default trolling
             local success, err = pcall(function()
                 humanoidRootPart.CFrame = premiumPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
             end)
@@ -816,7 +818,6 @@ local function handlePremiumUser(premiumPlayer)
                         _G.WaitingForPremiumResponse = false
                         if not _G.PremiumUserFound then
                             _G.TrollingActive = true
-                            copyAvatarAndGetTools("24k_mxtty1") -- Resume trolling with 24k_mxtty1 avatar
                             task.spawn(toolLoop)
                             task.spawn(teleportLoop)
                         end
@@ -835,6 +836,7 @@ local function handlePremiumUser(premiumPlayer)
                 end
             end)
         end
+ Beethoven
     else
         -- No premium user found, resume trolling if not already trolling
         if _G.PremiumUserFound then
@@ -844,7 +846,6 @@ local function handlePremiumUser(premiumPlayer)
                 sendChatMessage("🤖 No premium users found, resuming normal trolling!")
                 sendTTSMessage("No premium users found, resuming normal trolling!", "9")
                 _G.TrollingActive = true
-                copyAvatarAndGetTools("24k_mxtty1") -- Resume trolling with 24k_mxtty1 avatar
                 task.spawn(toolLoop)
                 task.spawn(teleportLoop)
             end
@@ -887,14 +888,14 @@ local function handleCommand(sender, text)
             sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text, PREMIUM_COMMAND_WEBHOOK_URL)
         end
         local success, err = pcall(function()
-            stopCurrentMode() -- Stop all modes and revert to default avatar
+            stopCurrentMode() -- Stop all modes and switch to DeeplyArtificial
             humanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
         end)
         if not success then
             sendChatMessage("❌ Teleport failed in stop: " .. tostring(err))
         end
-        sendChatMessage("✅ Stopped for " .. targetPlayer.Name .. "!")
-        sendTTSMessage("Stopped for " .. targetPlayer.Name .. "!", "9")
+        sendChatMessage("✅ Stopped for " .. targetPlayer.Name .. " and switched to DeeplyArtificial avatar!")
+        sendTTSMessage("Stopped for " .. targetPlayer.Name .. " and switched to DeeplyArtificial avatar!", "9")
     elseif textLower:find("!hop") then
         _G.LastInteractionTime = tick()
         sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
@@ -1011,7 +1012,7 @@ local function handleCommand(sender, text)
         if annoyName then
             local annoyPlayer = findPlayerByPartialName(annoyName)
             if annoyPlayer then
-                stopCurrentMode() -- Stop any active mode and revert to default avatar
+                stopCurrentMode() -- Stop any active mode and switch to DeeplyArtificial
                 copyAvatarAndGetTools("Giantkenneth101")
                 sendChatMessage("🎯 Annoying " .. annoyPlayer.Name .. " now!")
                 sendTTSMessage("Annoying " .. annoyPlayer.Name .. " now!", "9")
@@ -1066,7 +1067,7 @@ end)
 -- Initialize loops and TTS on join
 task.spawn(function()
     task.wait(2)
-    copyAvatarAndGetTools("24k_mxtty1") -- Start with 24k_mxtty1 for trolling/lag
+    copyAvatarAndGetTools("24k_mxtty1") -- Copy 24k_mxtty1 avatar and remove items
 
     -- Start continuous premium user monitoring
     monitorPremiumUsers()
@@ -1092,7 +1093,6 @@ Players.PlayerRemoving:Connect(function(plr)
             sendChatMessage("❌ Premium user " .. plr.Name .. " left, resuming normal behavior!")
             sendTTSMessage("Premium user " .. plr.Name .. " left, resuming normal behavior!", "9")
             _G.TrollingActive = true
-            copyAvatarAndGetTools("24k_mxtty1") -- Resume trolling with 24k_mxtty1 avatar
             task.spawn(toolLoop)
             task.spawn(teleportLoop)
         end
