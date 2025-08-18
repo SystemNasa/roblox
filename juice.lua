@@ -894,8 +894,8 @@ local function handleCommand(sender, text)
         if not success then
             sendChatMessage("❌ Teleport failed in stop: " .. tostring(err))
         end
-        sendChatMessage("✅ Stopped for " .. targetPlayer.Name .. ")
-        sendTTSMessage("Stopped for " .. targetPlayer.Name .. ", "9")
+        sendChatMessage("✅ Stopped for " .. targetPlayer.Name .. " and switched to DeeplyArtificial avatar!")
+        sendTTSMessage("Stopped for " .. targetPlayer.Name .. " and switched to DeeplyArtificial avatar!", "9")
     elseif textLower:find("!hop") then
         _G.LastInteractionTime = tick()
         sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
@@ -1150,4 +1150,4 @@ player.OnTeleport:Connect(function(state)
             warn("Teleport queue failed: " .. tostring(err))
         end
     end
-end)F
+end)
