@@ -728,7 +728,7 @@ end
 -- Handle premium user interaction
 local function handlePremiumUser(premiumPlayer)
     if premiumPlayer and premiumPlayer.Character and premiumPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        if not _G.PremiumUserFound or _G.PremiumPlayer ~= premiumPlayer then
+        if not _G.PremiumUserFound or _G.PremiumPlayer != premiumPlayer then
             -- New premium user found or different from current
             _G.PremiumUserFound = true
             _G.PremiumPlayer = premiumPlayer
@@ -893,8 +893,8 @@ local function handleCommand(sender, text)
         if not success then
             sendChatMessage("❌ Teleport failed in stop: " .. tostring(err))
         end
-        sendChatMessage("✅ Stopped for " .. targetPlayer.Name .. ")
-        sendTTSMessage("Stopped for " .. targetPlayer.Name .. ", "9")
+        sendChatMessage("✅ Stopped for " .. targetPlayer.Name .. " and switched to DeeplyArtificial avatar!")
+        sendTTSMessage("Stopped for " .. targetPlayer.Name .. " and switched to DeeplyArtificial avatar!", "9")
     elseif textLower:find("!hop") then
         _G.LastInteractionTime = tick()
         sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
