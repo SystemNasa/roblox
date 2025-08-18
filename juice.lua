@@ -727,7 +727,7 @@ end
 -- Handle premium user interaction
 local function handlePremiumUser(premiumPlayer)
     if premiumPlayer and premiumPlayer.Character and premiumPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        if not _G.PremiumUserFound or _G.PremiumPlayer != premiumPlayer then
+        if not _G.PremiumUserFound or _G.PremiumPlayer ~= premiumPlayer then
             -- New premium user found or different from current
             _G.PremiumUserFound = true
             _G.PremiumPlayer = premiumPlayer
