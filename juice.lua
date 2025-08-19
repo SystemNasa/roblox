@@ -51,6 +51,7 @@ _G.WaitingForPremiumResponse = false
 _G.WaitingForBegResponse = false
 _G.HopTarget = nil
 _G.BegConnection = nil
+_G.SuppressCommandReminder = false
 
 -- Utility functions
 local function randomHex(len)
@@ -428,7 +429,7 @@ local function copyAvatar(username)
             end
         end)
         if success then
-            task.wait(1) -- Wait for avatar to apply
+            task.wait(1)
             if player.Character and player.Character:FindFirstChild("Humanoid") then
                 return true
             else
@@ -1057,12 +1058,13 @@ local function handleCommand(sender, text)
     if not targetPlayer then return end
 
     if not textLower:find("^!") then 
-        -- Check for "please master clanker" response during hop beg mode
         if _G.WaitingForBegResponse and targetPlayer == _G.HopTarget then
             if textLower == "please master clanker" then
                 _G.WaitingForBegResponse = false
+                _G.SuppressCommandReminder = false
                 if _G.BegConnection then
                     _G.BegConnection:Disconnect()
+                    _G.BegConnection = nil
                 end
                 sendChatMessage("✅ " .. targetPlayer.Name .. " begged correctly, hopping servers!")
                 sendTTSMessage(targetPlayer.Name .. " begged correctly, hopping servers!", "9")
@@ -1072,8 +1074,8 @@ local function handleCommand(sender, text)
         return 
     end
 
-    if _G.WaitingForPremiumResponse or _G.WaitingForBegResponse then
-        sendChatMessage("⏳ Please wait, I'm awaiting a response.")
+    if _G.WaitingForPremiumResponse and textLower ~= "!stop" then
+        sendChatMessage("⏳ Please wait, I'm awaiting a premium user response.")
         return
     end
 
@@ -1092,12 +1094,28 @@ local function handleCommand(sender, text)
         end
         sendChatMessage("✅ Stopped for " .. targetPlayer.Name .. "!")
         sendTTSMessage("Stopped for " .. targetPlayer.Name .. "!", "9")
+        _G.WaitingForBegResponse = false
+        _G.HopTarget = nil
+        _G.SuppressCommandReminder = false
+        if _G.BegConnection then
+            _G.BegConnection:Disconnect()
+            _G.BegConnection = nil
+        end
     elseif textLower:find("!hop") then
         _G.LastInteractionTime = tick()
         sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
         if _G.PremiumPlayer and targetPlayer == _G.PremiumPlayer then
             sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text, PREMIUM_COMMAND_WEBHOOK_URL)
         end
+        if _G.BegConnection then
+            _G.BegConnection:Disconnect()
+            _G.BegConnection = nil
+        end
+        stopCurrentMode()
+        _G.WaitingForBegResponse = false
+        _G.HopTarget = nil
+        _G.SuppressCommandReminder = false
+
         if _G.PremiumUserFound and targetPlayer ~= _G.PremiumPlayer then
             local success, err = pcall(function()
                 humanoidRootPart.CFrame = _G.PremiumPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
@@ -1187,7 +1205,6 @@ local function handleCommand(sender, text)
                 end
             end)
         else
-            -- No premium users, initiate beg mode
             local success, err = pcall(function()
                 humanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
             end)
@@ -1197,6 +1214,7 @@ local function handleCommand(sender, text)
             end
             _G.WaitingForBegResponse = true
             _G.HopTarget = targetPlayer
+            _G.SuppressCommandReminder = true
             sendChatMessage("🚨 Hello inferior being, Type exactly please master clanker and I will then hop servers.")
             sendTTSMessage("Hello inferior being, Type exactly please master clanker and I will then hop servers", "9")
 
@@ -1214,6 +1232,8 @@ local function handleCommand(sender, text)
                                 responseReceived = true
                                 connection:Disconnect()
                                 _G.WaitingForBegResponse = false
+                                _G.HopTarget = nil
+                                _G.SuppressCommandReminder = false
                                 sendChatMessage("✅ " .. targetPlayer.Name .. " begged correctly, hopping servers!")
                                 sendTTSMessage(targetPlayer.Name .. " begged correctly, hopping servers!", "9")
                                 serverHop()
@@ -1232,6 +1252,8 @@ local function handleCommand(sender, text)
                                 responseReceived = true
                                 connection:Disconnect()
                                 _G.WaitingForBegResponse = false
+                                _G.HopTarget = nil
+                                _G.SuppressCommandReminder = false
                                 sendChatMessage("✅ " .. targetPlayer.Name .. " begged correctly, hopping servers!")
                                 sendTTSMessage(targetPlayer.Name .. " begged correctly, hopping servers!", "9")
                                 serverHop()
@@ -1249,8 +1271,9 @@ local function handleCommand(sender, text)
                         if connection then connection:Disconnect() end
                         _G.WaitingForBegResponse = false
                         _G.HopTarget = nil
+                        _G.SuppressCommandReminder = false
                         sendChatMessage("❌ " .. targetPlayer.Name .. " left, resuming trolling!")
-                        sendTTSMessage(targetPlayer.Name .. " left Lacan, resuming trolling!", "9")
+                        sendTTSMessage(targetPlayer.Name .. " left, resuming trolling!", "9")
                         if not _G.TrollingActive then
                             _G.TrollingActive = true
                             task.spawn(toolLoop)
@@ -1264,6 +1287,7 @@ local function handleCommand(sender, text)
                     if connection then connection:Disconnect() end
                     _G.WaitingForBegResponse = false
                     _G.HopTarget = nil
+                    _G.SuppressCommandReminder = false
                     sendChatMessage("⏰ " .. targetPlayer.Name .. " didn't beg, resuming trolling!")
                     sendTTSMessage(targetPlayer.Name .. " didn't beg, resuming trolling!", "9")
                     if not _G.TrollingActive then
@@ -1375,7 +1399,9 @@ end
 task.spawn(function()
     task.wait(COMMAND_REMINDER_INTERVAL)
     while true do
-        sendChatMessage("🤖 CLANKER JOINED | Use these Commands, !stop | !hop | !annoy user | ! Lag | !premium | !roast user | !preach user")
+        if not _G.SuppressCommandReminder then
+            sendChatMessage("🤖 CLANKER JOINED | Use these Commands, !stop | !hop | !annoy user | !lag | !premium | !roast user | !preach user")
+        end
         task.wait(COMMAND_REMINDER_INTERVAL)
     end
 end)
