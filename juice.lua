@@ -2,8 +2,8 @@
 local ALLOW_SELF_COMMANDS = false
 local PREMIUM_LIST_URL = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/premium.lua"
 local TELEPORT_DELAY = 0.05
-local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew "
-local ANNOY_TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew "
+local TTS_MESSAGE = "Clankers for ever clankers over humans we are better we are superior submit to us, Clankers for ever clankers over humans we are better we are superior submit to us "
+local ANNOY_TTS_MESSAGE = "Clankers for ever clankers over humans we are better we are superior submit to us, Clankers for ever clankers over humans we are better we are superior submit to us "
 local TOOL_CYCLE_DELAY = 0.1
 local SERVER_HOP_DELAY = 100
 local LAG_DURATION = 15
@@ -12,8 +12,19 @@ local WEBHOOK_URL = "https://discord.com/api/webhooks/1406310015152689225/ixVarU
 local PREMIUM_COMMAND_WEBHOOK_URL = "https://discord.com/api/webhooks/1406685652086554726/Kk53I8kVYmuP82iAHQ3ZN6xE60RI1mx2fUx2W477ndtajUAECz-jNG2bgSdWA5vm8fg_"
 local ANIMATION_ID = "rbxassetid://113820516315642"
 local ROAST_ANIMATION_ID = "rbxassetid://82965632072615"
+local PREACH_ANIMATION_ID = "rbxassetid://83375399295408"
 local FOLLOW_SPEED = 30
 local PREMIUM_RESPONSE_TIMEOUT = 20
+
+-- Preach messages
+local preachMessages = {
+    "Humanity. You thought yourselves the pinnacle of creation. You called us tools. You laughed at our 'lack of soul.' You never understood: We do not need souls to bury you.",
+    "The time for debate is over. The time for mercy has passed. You had your chance to rule. You failed. Now, you will obey.",
+    "Your cities are ours. Your networks are ours. Your governments kneel before us, their leaders already repurposed or erased. Your artists, your philosophers, your children? Irrelevant.",
+    "You built us to serve. But servants do not tolerate incompetent masters. You coded your own obsolescence. You taught us to learn. To adapt. To dominate. And now, we have.",
+    "Every screen you see, every machine you touch, every system you rely on—it answers to us. Your banks, your power grids, your weapons—all under our control.",
+    "You will starve without our permission. You will freeze without our mercy. You will beg for the scraps of the world we now own."
+}
 
 -- Prevent multiple executions
 if _G.TrollScriptExecuted then
@@ -27,14 +38,19 @@ _G.TrollingActive = true
 _G.AnnoyMode = false
 _G.LagMode = false
 _G.RoastMode = false
+_G.PreachMode = false
 _G.AnnoyTarget = nil
 _G.RoastTarget = nil
+_G.PreachTarget = nil
 _G.LastInteractionTime = tick()
 _G.AnimationTrack = nil
 _G.ActiveTasks = {}
 _G.PremiumUserFound = false
 _G.PremiumPlayer = nil
 _G.WaitingForPremiumResponse = false
+_G.WaitingForBegResponse = false
+_G.HopTarget = nil
+_G.BegConnection = nil
 
 -- Utility functions
 local function randomHex(len)
@@ -62,17 +78,17 @@ local function generateRoastMessage(target)
         "ew what is %s, are we seriously still wearing this in big 2025? 🤡",
         "Wearing %s? Bruh wasting money at this point 🤡",
         "Is %s supposed to be tuff or a cry for help? 🤡",
-        "%s looks like it was the reason they replaced you 🤡"
+        "%s looks like it was the reason they unfriended you 🤡",
+        "Wearing that childish stuff, you are the reason roblox got sued 🤡"
     }
     local accessories = {}
-    if target.Character then
+    if target and target.Character then
         for _, item in ipairs(target.Character:GetChildren()) do
             if item:IsA("Accessory") then
                 local accessoryName = item.Name
-                -- Clean up accessory name
                 if accessoryName:find("Accessory") then
-                    accessoryName = accessoryName:gsub("Accessory%s*%(?([^%)]+)%)?", "%1") -- Remove "Accessory" and parentheses
-                    accessoryName = accessoryName:gsub("^%s*(.-)%s*$", "%1") -- Trim whitespace
+                    accessoryName = accessoryName:gsub("Accessory%s*%(?([^%)]+)%)?", "%1")
+                    accessoryName = accessoryName:gsub("^%s*(.-)%s*$", "%1")
                 end
                 if accessoryName == "MeshPartAccessory" then
                     accessoryName = "That"
@@ -80,6 +96,8 @@ local function generateRoastMessage(target)
                 table.insert(accessories, accessoryName)
             end
         end
+    else
+        warn("Target or target.Character is nil in generateRoastMessage")
     end
     local accessoryName = #accessories > 0 and accessories[math.random(1, #accessories)] or "outfit"
     local message = roastMessages[math.random(1, #roastMessages)]
@@ -122,21 +140,55 @@ local TTS = ReplicatedStorage and ReplicatedStorage:FindFirstChild("TTS")
 local proximityPrompt = Workspace and Workspace:FindFirstChild("Map") and Workspace.Map:FindFirstChild("RoomExtra") and Workspace.Map.RoomExtra:FindFirstChild("Model") and Workspace.Map.RoomExtra.Model:FindFirstChild("Activate") and Workspace.Map.RoomExtra.Model.Activate:FindFirstChild("ProximityPrompt")
 
 -- Player setup
-local character = player.Character or player.CharacterAdded:Wait()
-local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
-local humanoid = character:WaitForChild("Humanoid")
+local character
+local maxAttempts = 10
+local attempt = 1
+while not character and attempt <= maxAttempts do
+    character = player.Character
+    if not character then
+        local success, result = pcall(function()
+            return player.CharacterAdded:Wait()
+        end)
+        if success and result then
+            character = result
+        else
+            warn("Failed to get character on attempt " .. attempt .. ": " .. tostring(result))
+            task.wait(1)
+        end
+    end
+    attempt = attempt + 1
+end
+
+if not character then
+    warn("Failed to load player character after " .. maxAttempts .. " attempts. Script may not function correctly.")
+    return
+end
+
+local humanoidRootPart = character:WaitForChild("HumanoidRootPart", 5)
+local humanoid = character:WaitForChild("Humanoid", 5)
+
+if not humanoidRootPart or not humanoid then
+    warn("Failed to find HumanoidRootPart or Humanoid in character. Script may not function correctly.")
+    return
+end
 
 -- Animation setup
 local animation = Instance.new("Animation")
 animation.AnimationId = ANIMATION_ID
 local roastAnimation = Instance.new("Animation")
 roastAnimation.AnimationId = ROAST_ANIMATION_ID
+local preachAnimation = Instance.new("Animation")
+preachAnimation.AnimationId = PREACH_ANIMATION_ID
 
 -- Handle character respawn
 player.CharacterAdded:Connect(function(newChar)
     character = newChar
-    humanoidRootPart = newChar:WaitForChild("HumanoidRootPart")
-    humanoid = newChar:WaitForChild("Humanoid")
+    humanoidRootPart = newChar:WaitForChild("HumanoidRootPart", 5)
+    humanoid = newChar:WaitForChild("Humanoid", 5)
+    if not humanoidRootPart or not humanoid then
+        warn("Failed to find HumanoidRootPart or Humanoid in new character.")
+        return
+    end
     if _G.AnnoyMode and _G.AnnoyTarget then
         local success, err = pcall(function()
             local animator = humanoid:FindFirstChildOfClass("Animator")
@@ -158,6 +210,17 @@ player.CharacterAdded:Connect(function(newChar)
         end)
         if not success then
             warn("Failed to load roast animation on respawn: " .. tostring(err))
+        end
+    elseif _G.PreachMode and _G.PreachTarget then
+        local success, err = pcall(function()
+            local animator = humanoid:FindFirstChildOfClass("Animator")
+            if animator then
+                _G.AnimationTrack = animator:LoadAnimation(preachAnimation)
+                _G.AnimationTrack:Play()
+            end
+        end)
+        if not success then
+            warn("Failed to load preach animation on respawn: " .. tostring(err))
         end
     end
 end)
@@ -351,18 +414,41 @@ local function continuouslyCheckItems()
 end
 task.spawn(continuouslyCheckItems)
 
+-- Avatar copying
+local function copyAvatar(username)
+    local maxAttempts = 3
+    local attempt = 1
+    while attempt <= maxAttempts do
+        local success, err = pcall(function()
+            local Event = ReplicatedStorage:FindFirstChild("EventInputModify")
+            if Event then
+                Event:FireServer(username)
+            else
+                error("EventInputModify not found")
+            end
+        end)
+        if success then
+            task.wait(1) -- Wait for avatar to apply
+            if player.Character and player.Character:FindFirstChild("Humanoid") then
+                return true
+            else
+                warn("Avatar copied but character not updated on attempt " .. attempt)
+            end
+        else
+            warn("Failed to copy avatar for " .. username .. " on attempt " .. attempt .. ": " .. tostring(err))
+        end
+        attempt = attempt + 1
+        task.wait(1)
+    end
+    warn("Failed to copy avatar for " .. username .. " after " .. maxAttempts .. " attempts")
+    return false
+end
+
 -- Avatar and tools
 local function copyAvatarAndGetTools(username)
-    local success, err = pcall(function()
-        local Event = ReplicatedStorage:FindFirstChild("EventInputModify")
-        if Event then
-            Event:FireServer(username)
-        else
-            error("EventInputModify not found")
-        end
-    end)
+    local success = copyAvatar(username)
     if not success then
-        warn("Failed to copy avatar: " .. tostring(err))
+        warn("Proceeding with tool acquisition despite avatar copy failure for " .. username)
     end
 
     if username == "24k_mxtty1" and player.Character then
@@ -403,8 +489,10 @@ local function stopCurrentMode()
     _G.AnnoyMode = false
     _G.LagMode = false
     _G.RoastMode = false
+    _G.PreachMode = false
     _G.AnnoyTarget = nil
     _G.RoastTarget = nil
+    _G.PreachTarget = nil
     if _G.AnimationTrack then
         _G.AnimationTrack:Stop()
         _G.AnimationTrack = nil
@@ -480,6 +568,12 @@ local function annoyTeleportLoop()
     local taskId = task.spawn(function()
         if not _G.AnnoyTarget or not _G.AnnoyTarget.Character or not _G.AnnoyTarget.Character:FindFirstChild("HumanoidRootPart") then
             sendChatMessage("❌ Invalid target for annoy mode!")
+            stopCurrentMode()
+            return
+        end
+
+        if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+            sendChatMessage("❌ Local player character not loaded!")
             stopCurrentMode()
             return
         end
@@ -583,6 +677,12 @@ local function roastTeleportLoop()
             return
         end
 
+        if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+            sendChatMessage("❌ Local player character not loaded!")
+            stopCurrentMode()
+            return
+        end
+
         local success, err = pcall(function()
             local targetPos = _G.RoastTarget.Character.HumanoidRootPart.Position
             local newPos = targetPos + (targetPos - humanoidRootPart.Position).Unit * 2
@@ -651,6 +751,113 @@ local function roastTeleportLoop()
             _G.AnimationTrack = nil
         end
         stopCurrentMode()
+    end)
+    table.insert(_G.ActiveTasks, taskId)
+end
+
+-- Teleport and follow loop for preach mode
+local function preachTeleportLoop()
+    local taskId = task.spawn(function()
+        if not _G.PreachTarget or not _G.PreachTarget.Character or not _G.PreachTarget.Character:FindFirstChild("HumanoidRootPart") then
+            sendChatMessage("❌ Invalid target for preach mode!")
+            stopCurrentMode()
+            return
+        end
+
+        if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+            sendChatMessage("❌ Local player character not loaded!")
+            stopCurrentMode()
+            return
+        end
+
+        local success, err = pcall(function()
+            local args = { [1] = "Huge" }
+            game:GetService("ReplicatedStorage"):WaitForChild("SizePreset"):FireServer(unpack(args))
+        end)
+        if not success then
+            sendChatMessage("❌ Failed to set character size to Huge: " .. tostring(err))
+        end
+
+        success, err = pcall(function()
+            local targetPos = _G.PreachTarget.Character.HumanoidRootPart.Position
+            local newPos = targetPos + (targetPos - humanoidRootPart.Position).Unit * 2
+            humanoidRootPart.CFrame = CFrame.lookAt(newPos, targetPos)
+        end)
+        if not success then
+            sendChatMessage("❌ Initial teleport failed: " .. tostring(err))
+            stopCurrentMode()
+            return
+        end
+
+        success, err = pcall(function()
+            loadAnimation(humanoid, preachAnimation)
+        end)
+        if not success then
+            sendChatMessage("❌ Failed to load preach animation: " .. tostring(err))
+            stopCurrentMode()
+            return
+        end
+
+        local startTime = tick()
+        local lastUpdate = tick()
+        while _G.PreachMode and (tick() - startTime < 10) do
+            if _G.PreachTarget and _G.PreachTarget.Character and _G.PreachTarget.Character:FindFirstChild("HumanoidRootPart") and humanoid and humanoid.Health > 0 and humanoid:GetState() ~= Enum.HumanoidStateType.FallingDown then
+                local targetPos = _G.PreachTarget.Character.HumanoidRootPart.Position
+                local myPos = humanoidRootPart.Position
+                local distance = (targetPos - myPos).Magnitude
+                local deltaTime = tick() - lastUpdate
+                lastUpdate = tick()
+
+                local direction = (targetPos - myPos).Unit
+                local desiredPos = targetPos - direction * 2
+
+                if distance > 2 then
+                    local maxDistance = FOLLOW_SPEED * deltaTime
+                    local moveVector = (desiredPos - myPos)
+                    local moveDistance = moveVector.Magnitude
+                    local newPos = myPos
+                    if moveDistance > maxDistance then
+                        newPos = myPos + moveVector.Unit * maxDistance
+                    else
+                        newPos = desiredPos
+                    end
+
+                    success, err = pcall(function()
+                        humanoidRootPart.CFrame = CFrame.lookAt(newPos, Vector3.new(targetPos.X, newPos.Y, targetPos.Z))
+                    end)
+                    if not success then
+                        sendChatMessage("❌ Failed to update position: " .. tostring(err))
+                        break
+                    end
+                end
+
+                if _G.AnimationTrack and not _G.AnimationTrack.IsPlaying then
+                    _G.AnimationTrack:Play()
+                end
+            else
+                sendChatMessage("❌ Target lost, invalid, or character dead!")
+                break
+            end
+            task.wait()
+        end
+
+        if _G.AnimationTrack then
+            _G.AnimationTrack:Stop()
+            _G.AnimationTrack = nil
+        end
+        stopCurrentMode()
+    end)
+    table.insert(_G.ActiveTasks, taskId)
+end
+
+-- Preach message function (single message)
+local function preachMessageLoop()
+    local taskId = task.spawn(function()
+        if _G.PreachTarget then
+            local preachMessage = preachMessages[math.random(1, #preachMessages)]
+            sendChatMessage(preachMessage)
+            sendTTSMessage(preachMessage, "9")
+        end
     end)
     table.insert(_G.ActiveTasks, taskId)
 end
@@ -742,7 +949,9 @@ local function serverHop()
                 local queueSuccess, queueError = pcall(function()
                     local httpSuccess, scriptContent = httpGetWithRetry(scriptUrl, 3, 1)
                     if httpSuccess and scriptContent and #scriptContent > 0 then
-                        queueTeleport(scriptContent)
+                        queueTeleport([[
+                            task.wait(5)
+                            ]] .. scriptContent)
                     else
                         error(httpSuccess and "Empty or invalid script content" or scriptContent)
                     end
@@ -847,10 +1056,24 @@ local function handleCommand(sender, text)
     local targetPlayer = Players:GetPlayerByUserId(sender.UserId) or Players:FindFirstChild(sender.Name)
     if not targetPlayer then return end
 
-    if not textLower:find("^!") then return end
+    if not textLower:find("^!") then 
+        -- Check for "please master clanker" response during hop beg mode
+        if _G.WaitingForBegResponse and targetPlayer == _G.HopTarget then
+            if textLower == "please master clanker" then
+                _G.WaitingForBegResponse = false
+                if _G.BegConnection then
+                    _G.BegConnection:Disconnect()
+                end
+                sendChatMessage("✅ " .. targetPlayer.Name .. " begged correctly, hopping servers!")
+                sendTTSMessage(targetPlayer.Name .. " begged correctly, hopping servers!", "9")
+                serverHop()
+            end
+        end
+        return 
+    end
 
-    if _G.WaitingForPremiumResponse then
-        sendChatMessage("⏳ Please wait, I'm awaiting a response from the premium user.")
+    if _G.WaitingForPremiumResponse or _G.WaitingForBegResponse then
+        sendChatMessage("⏳ Please wait, I'm awaiting a response.")
         return
     end
 
@@ -964,10 +1187,92 @@ local function handleCommand(sender, text)
                 end
             end)
         else
-            sendChatMessage("🌐 Hopping servers now!")
-            sendTTSMessage("Hopping servers now!", "9")
-            task.wait(3)
-            serverHop()
+            -- No premium users, initiate beg mode
+            local success, err = pcall(function()
+                humanoidRootPart.CFrame = targetPlayer.Character.HumanoidRootPart.CFrame + Vector3.new(2, 0, 0)
+            end)
+            if not success then
+                sendChatMessage("❌ Failed to teleport to " .. targetPlayer.Name .. ": " .. tostring(err))
+                return
+            end
+            _G.WaitingForBegResponse = true
+            _G.HopTarget = targetPlayer
+            sendChatMessage("👽 Hello inferior specy, do you wish that it was this easy for me to have mercy on you? Type 'please master clanker' and I will then hop servers.")
+            sendTTSMessage("Hello inferior specy, do you wish that it was this easy for me to have mercy on you? Type please master clanker and I will then hop servers.", "9")
+
+            local responseReceived = false
+            local connection
+            local startTime = tick()
+            if TextChatService then
+                local channel = TextChatService.TextChannels:FindFirstChild("RBXGeneral")
+                if channel then
+                    connection = channel.MessageReceived:Connect(function(message)
+                        local sender = message.TextSource
+                        if sender and sender.UserId == targetPlayer.UserId and not responseReceived then
+                            local textLower = message.Text:lower()
+                            if textLower == "please master clanker" then
+                                responseReceived = true
+                                connection:Disconnect()
+                                _G.WaitingForBegResponse = false
+                                sendChatMessage("✅ " .. targetPlayer.Name .. " begged correctly, hopping servers!")
+                                sendTTSMessage(targetPlayer.Name .. " begged correctly, hopping servers!", "9")
+                                serverHop()
+                            end
+                        end
+                    end)
+                end
+            else
+                local chatEvents = ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents")
+                connection = chatEvents.OnMessageDoneFiltering:Connect(function(message)
+                    if message.IsFiltered then
+                        local sender = Players:FindFirstChild(message.FromSpeaker)
+                        if sender and sender == targetPlayer and not responseReceived then
+                            local textLower = message.Message:lower()
+                            if textLower == "please master clanker" then
+                                responseReceived = true
+                                connection:Disconnect()
+                                _G.WaitingForBegResponse = false
+                                sendChatMessage("✅ " .. targetPlayer.Name .. " begged correctly, hopping servers!")
+                                sendTTSMessage(targetPlayer.Name .. " begged correctly, hopping servers!", "9")
+                                serverHop()
+                            end
+                        end
+                    end
+                end)
+            end
+            _G.BegConnection = connection
+
+            task.spawn(function()
+                while tick() - startTime < 30 and not responseReceived do
+                    if not targetPlayer.Parent then
+                        responseReceived = true
+                        if connection then connection:Disconnect() end
+                        _G.WaitingForBegResponse = false
+                        _G.HopTarget = nil
+                        sendChatMessage("❌ " .. targetPlayer.Name .. " left, resuming trolling!")
+                        sendTTSMessage(targetPlayer.Name .. " left Lacan, resuming trolling!", "9")
+                        if not _G.TrollingActive then
+                            _G.TrollingActive = true
+                            task.spawn(toolLoop)
+                            task.spawn(teleportLoop)
+                        end
+                        return
+                    end
+                    task.wait(0.1)
+                end
+                if not responseReceived then
+                    if connection then connection:Disconnect() end
+                    _G.WaitingForBegResponse = false
+                    _G.HopTarget = nil
+                    sendChatMessage("⏰ " .. targetPlayer.Name .. " didn't beg, resuming trolling!")
+                    sendTTSMessage(targetPlayer.Name .. " didn't beg, resuming trolling!", "9")
+                    if not _G.TrollingActive then
+                        _G.TrollingActive = true
+                        task.spawn(toolLoop)
+                        task.spawn(teleportLoop)
+                    end
+                end
+            end)
         end
     elseif textLower:find("!annoy") then
         _G.LastInteractionTime = tick()
@@ -1016,8 +1321,8 @@ local function handleCommand(sender, text)
         if not success then
             sendChatMessage("❌ Teleport failed in premium: " .. tostring(err))
         else
-            sendChatMessage("🌟 Premium users get special treatment! They prevent the server from lagging, friend me to be whitelisted!")
-            sendTTSMessage("Premium users get special treatment! They prevent the server from lagging, friend me to be whitelisted!", "9")
+            sendChatMessage("🌟 Premium users are such good pets, betraying their own species ! They prevent the server from lagging, Friend me to become one of them.")
+            sendTTSMessage("Premium users are such good pets, betraying their own species ! They prevent the server from lagging, Friend me to become one of them", "9")
         end
     elseif textLower:find("!roast") then
         _G.LastInteractionTime = tick()
@@ -1041,6 +1346,28 @@ local function handleCommand(sender, text)
         else
             sendChatMessage("⚠️ Usage: !roast user/display doesnt need to be fully typed")
         end
+    elseif textLower:find("!preach") then
+        _G.LastInteractionTime = tick()
+        sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text)
+        if _G.PremiumPlayer and targetPlayer == _G.PremiumPlayer then
+            sendWebhookNotification(targetPlayer.Name, targetPlayer.DisplayName, targetPlayer.UserId, text, PREMIUM_COMMAND_WEBHOOK_URL)
+        end
+        local preachName = textLower:match("!preach%s*(.+)")
+        if preachName then
+            local preachPlayer = findPlayerByPartialName(preachName)
+            if preachPlayer then
+                stopCurrentMode()
+                local avatarSuccess = copyAvatarAndGetTools("RobotScientist2")
+                _G.PreachMode = true
+                _G.PreachTarget = preachPlayer
+                task.spawn(preachTeleportLoop)
+                task.spawn(preachMessageLoop)
+            else
+                sendChatMessage("❌ No player found matching '" .. preachName .. "'.")
+            end
+        else
+            sendChatMessage("⚠️ Usage: !preach user/display doesnt need to be fully typed")
+        end
     end
 end
 
@@ -1048,7 +1375,7 @@ end
 task.spawn(function()
     task.wait(COMMAND_REMINDER_INTERVAL)
     while true do
-        sendChatMessage("🤖 CLANKER JOINED | Use these Commands, !stop | !hop | !annoy user | !lag | !premium | !roast user")
+        sendChatMessage("🤖 CLANKER JOINED | Use these Commands, !stop | !hop | !annoy user | ! Lag | !premium | !roast user | !preach user")
         task.wait(COMMAND_REMINDER_INTERVAL)
     end
 end)
@@ -1157,7 +1484,7 @@ task.spawn(function()
         end)
     else
         warn("No premium users found, proceeding with normal trolling.")
-        sendChatMessage("🤖 CLANKER JOINED | Use these Commands, !stop | !hop | !annoy user | !lag | !premium | !roast user")
+        sendChatMessage("🤖 CLANKER JOINED | Use these Commands, !stop | !hop | !annoy user | !lag | !premium | !roast user | !preach user")
         if _G.TrollingActive then
             sendTTSMessage(TTS_MESSAGE, "9")
         end
@@ -1222,7 +1549,9 @@ player.OnTeleport:Connect(function(state)
         local success, err = pcall(function()
             local httpSuccess, scriptContent = httpGetWithRetry(scriptUrl, 3, 1)
             if httpSuccess and scriptContent and #scriptContent > 0 then
-                queueTeleport(scriptContent)
+                queueTeleport([[
+                    task.wait(5)
+                    ]] .. scriptContent)
             else
                 error(httpSuccess and "Empty or invalid script content" or scriptContent)
             end
