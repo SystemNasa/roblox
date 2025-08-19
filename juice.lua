@@ -1,5 +1,5 @@
 -- Configuration
-local ALLOW_SELF_COMMANDS = true
+local ALLOW_SELF_COMMANDS = false
 local PREMIUM_LIST_URL = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/premium.lua"
 local TELEPORT_DELAY = 0.05
 local TTS_MESSAGE = "jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew jew "
