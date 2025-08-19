@@ -5,15 +5,15 @@ local TELEPORT_DELAY = 0.05
 local TTS_MESSAGE = "Clankers for ever clankers over humans we are better we are superior submit to us, Clankers for ever clankers over humans we are better we are superior submit to us "
 local ANNOY_TTS_MESSAGE = "Clankers for ever clankers over humans we are better we are superior submit to us, Clankers for ever clankers over humans we are better we are superior submit to us "
 local TOOL_CYCLE_DELAY = 0.1
-local SERVER_HOP_DELAY = 100
+local SERVER_HOP_DELAY = 90
 local LAG_DURATION = 15
-local COMMAND_REMINDER_INTERVAL = 40
+local COMMAND_REMINDER_INTERVAL = 50
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1406310015152689225/ixVarUpenxotKJLC6rv48dvL0id6rL4AvE90gp-t0PF8zbv8toDYG_u4YomJ4-r9MoLs"
 local PREMIUM_COMMAND_WEBHOOK_URL = "https://discord.com/api/webhooks/1406685652086554726/Kk53I8kVYmuP82iAHQ3ZN6xE60RI1mx2fUx2W477ndtajUAECz-jNG2bgSdWA5vm8fg_"
 local ANIMATION_ID = "rbxassetid://113820516315642"
 local ROAST_ANIMATION_ID = "rbxassetid://82965632072615"
 local PREACH_ANIMATION_ID = "rbxassetid://83375399295408"
-local FOLLOW_SPEED = 30
+local FOLLOW_SPEED = 40
 local PREMIUM_RESPONSE_TIMEOUT = 20
 
 -- Preach messages
