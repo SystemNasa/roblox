@@ -1197,8 +1197,8 @@ local function handleCommand(sender, text)
             end
             _G.WaitingForBegResponse = true
             _G.HopTarget = targetPlayer
-            sendChatMessage("👽 Hello inferior being, do you wish that it was this easy for me to have mercy on you? Type 'please master clanker' and I will then hop servers.")
-            sendTTSMessage("Hello inferior being, do you wish that it was this easy for me to have mercy on you? Type please master clanker and I will then hop servers.", "9")
+            sendChatMessage("🚨 Hello inferior being, Type exactly 'please master clanker' and I will then hop servers.")
+            sendTTSMessage("Hello inferior being, Type exactly 'please master clanker' and I will then hop servers", "9")
 
             local responseReceived = false
             local connection
