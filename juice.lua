@@ -589,17 +589,44 @@ local function enableNoclip()
     table.insert(_G.ActiveTasks, taskId)
 end
 
--- Annoy teleport loop
+-- Revised annoy teleport loop with retry logic
 local function annoyTeleportLoop()
     local taskId = task.spawn(function()
-        if not _G.AnnoyTarget or not _G.AnnoyTarget.Character or not _G.AnnoyTarget.Character:FindFirstChild("HumanoidRootPart") or not _G.AnnoyTarget.Character:FindFirstChild("Humanoid") or _G.AnnoyTarget.Character.Humanoid.Health <= 0 then
+        local maxValidationRetries = 3
+        local retryDelay = 0.5
+
+        -- Initial target validation
+        local targetValid = false
+        for attempt = 1, maxValidationRetries do
+            if _G.AnnoyTarget and _G.AnnoyTarget.Parent and _G.AnnoyTarget.Character then
+                local targetRootPart = _G.AnnoyTarget.Character:FindFirstChild("HumanoidRootPart")
+                local targetHumanoid = _G.AnnoyTarget.Character:FindFirstChild("Humanoid")
+                if targetRootPart and targetHumanoid then
+                    targetValid = true
+                    break
+                else
+                    warn("Target validation failed on attempt " .. attempt .. ": " ..
+                        (not targetRootPart and "No HumanoidRootPart" or "") ..
+                        (not targetHumanoid and "No Humanoid" or ""))
+                end
+            else
+                warn("Target validation failed on attempt " .. attempt .. ": " ..
+                    (not _G.AnnoyTarget and "No AnnoyTarget" or "") ..
+                    (not _G.AnnoyTarget.Parent and "Target not in Players" or "") ..
+                    (not _G.AnnoyTarget.Character and "No Character" or ""))
+            end
+            task.wait(retryDelay)
+        end
+
+        if not targetValid then
             sendChatMessage("❌ Invalid target for annoy mode!")
             stopCurrentMode()
             return
         end
 
-        if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
-            sendChatMessage("❌ Local player character not loaded or dead!")
+        -- Validate local player
+        if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") then
+            sendChatMessage("❌ Local player character not loaded!")
             stopCurrentMode()
             return
         end
@@ -628,13 +655,37 @@ local function annoyTeleportLoop()
 
         local lastUpdate = tick()
         while _G.AnnoyMode do
-            -- Validate target and player character
-            if not _G.AnnoyTarget or not _G.AnnoyTarget.Parent or not _G.AnnoyTarget.Character or not _G.AnnoyTarget.Character:FindFirstChild("HumanoidRootPart") or not _G.AnnoyTarget.Character:FindFirstChild("Humanoid") or _G.AnnoyTarget.Character.Humanoid.Health <= 0 then
-                sendChatMessage("❌ Target lost, invalid, or dead!")
+            -- Validate target with retries
+            local targetValid = false
+            for attempt = 1, maxValidationRetries do
+                if _G.AnnoyTarget and _G.AnnoyTarget.Parent and _G.AnnoyTarget.Character then
+                    local targetRootPart = _G.AnnoyTarget.Character:FindFirstChild("HumanoidRootPart")
+                    local targetHumanoid = _G.AnnoyTarget.Character:FindFirstChild("Humanoid")
+                    if targetRootPart and targetHumanoid then
+                        targetValid = true
+                        break
+                    else
+                        warn("Target validation failed on attempt " .. attempt .. ": " ..
+                            (not targetRootPart and "No HumanoidRootPart" or "") ..
+                            (not targetHumanoid and "No Humanoid" or ""))
+                    end
+                else
+                    warn("Target validation failed on attempt " .. attempt .. ": " ..
+                        (not _G.AnnoyTarget and "No AnnoyTarget" or "") ..
+                        (not _G.AnnoyTarget.Parent and "Target not in Players" or "") ..
+                        (not _G.AnnoyTarget.Character and "No Character" or ""))
+                end
+                task.wait(retryDelay)
+            end
+
+            if not targetValid then
+                sendChatMessage("❌ Target lost or invalid after retries!")
                 break
             end
-            if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
-                sendChatMessage("❌ Local player character lost or dead!")
+
+            -- Validate local player
+            if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") then
+                sendChatMessage("❌ Local player character lost!")
                 break
             end
 
@@ -969,7 +1020,7 @@ local function serverHop()
             end)
             if success and response and response.data then
                 for _, v in pairs(response.data) do
-                    if v.playing < v.maxPlayers and v.id ~= game.JobId then
+                    if v.playing < v.maxPlayers and v.id != game.JobId then
                         table.insert(servers, v.id)
                     end
                 end
