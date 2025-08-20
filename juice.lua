@@ -589,44 +589,18 @@ local function enableNoclip()
     table.insert(_G.ActiveTasks, taskId)
 end
 
--- Revised annoy teleport loop with retry logic
+-- Updated annoy teleport loop
 local function annoyTeleportLoop()
     local taskId = task.spawn(function()
-        local maxValidationRetries = 3
-        local retryDelay = 0.5
-
         -- Initial target validation
-        local targetValid = false
-        for attempt = 1, maxValidationRetries do
-            if _G.AnnoyTarget and _G.AnnoyTarget.Parent and _G.AnnoyTarget.Character then
-                local targetRootPart = _G.AnnoyTarget.Character:FindFirstChild("HumanoidRootPart")
-                local targetHumanoid = _G.AnnoyTarget.Character:FindFirstChild("Humanoid")
-                if targetRootPart and targetHumanoid then
-                    targetValid = true
-                    break
-                else
-                    warn("Target validation failed on attempt " .. attempt .. ": " ..
-                        (not targetRootPart and "No HumanoidRootPart" or "") ..
-                        (not targetHumanoid and "No Humanoid" or ""))
-                end
-            else
-                warn("Target validation failed on attempt " .. attempt .. ": " ..
-                    (not _G.AnnoyTarget and "No AnnoyTarget" or "") ..
-                    (not _G.AnnoyTarget.Parent and "Target not in Players" or "") ..
-                    (not _G.AnnoyTarget.Character and "No Character" or ""))
-            end
-            task.wait(retryDelay)
-        end
-
-        if not targetValid then
+        if not _G.AnnoyTarget or not _G.AnnoyTarget.Parent then
             sendChatMessage("❌ Invalid target for annoy mode!")
             stopCurrentMode()
             return
         end
 
-        -- Validate local player
-        if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") then
-            sendChatMessage("❌ Local player character not loaded!")
+        if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
+            sendChatMessage("❌ Local player character not loaded or dead!")
             stopCurrentMode()
             return
         end
@@ -655,43 +629,39 @@ local function annoyTeleportLoop()
 
         local lastUpdate = tick()
         while _G.AnnoyMode do
-            -- Validate target with retries
-            local targetValid = false
-            for attempt = 1, maxValidationRetries do
-                if _G.AnnoyTarget and _G.AnnoyTarget.Parent and _G.AnnoyTarget.Character then
-                    local targetRootPart = _G.AnnoyTarget.Character:FindFirstChild("HumanoidRootPart")
-                    local targetHumanoid = _G.AnnoyTarget.Character:FindFirstChild("Humanoid")
-                    if targetRootPart and targetHumanoid then
-                        targetValid = true
+            -- Revalidate target if character is nil or invalid
+            if not _G.AnnoyTarget or not _G.AnnoyTarget.Parent then
+                sendChatMessage("❌ Target left the game!")
+                break
+            end
+
+            -- Wait for target character to reload if temporarily unavailable
+            local targetCharacter = _G.AnnoyTarget.Character
+            if not targetCharacter or not targetCharacter:FindFirstChild("HumanoidRootPart") or not targetCharacter:FindFirstChild("Humanoid") or targetCharacter.Humanoid.Health <= 0 then
+                local waitTime = 0
+                local maxWaitTime = 5 -- Wait up to 5 seconds for character to reload
+                while waitTime < maxWaitTime and _G.AnnoyMode do
+                    targetCharacter = _G.AnnoyTarget.Character
+                    if targetCharacter and targetCharacter:FindFirstChild("HumanoidRootPart") and targetCharacter:FindFirstChild("Humanoid") and targetCharacter.Humanoid.Health > 0 then
                         break
-                    else
-                        warn("Target validation failed on attempt " .. attempt .. ": " ..
-                            (not targetRootPart and "No HumanoidRootPart" or "") ..
-                            (not targetHumanoid and "No Humanoid" or ""))
                     end
-                else
-                    warn("Target validation failed on attempt " .. attempt .. ": " ..
-                        (not _G.AnnoyTarget and "No AnnoyTarget" or "") ..
-                        (not _G.AnnoyTarget.Parent and "Target not in Players" or "") ..
-                        (not _G.AnnoyTarget.Character and "No Character" or ""))
+                    task.wait(0.1)
+                    waitTime = waitTime + 0.1
                 end
-                task.wait(retryDelay)
+                if not targetCharacter or not targetCharacter:FindFirstChild("HumanoidRootPart") or not targetCharacter:FindFirstChild("Humanoid") or targetCharacter.Humanoid.Health <= 0 then
+                    sendChatMessage("❌ Target character invalid or dead after waiting!")
+                    break
+                end
             end
 
-            if not targetValid then
-                sendChatMessage("❌ Target lost or invalid after retries!")
+            -- Validate local player character
+            if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
+                sendChatMessage("❌ Local player character lost or dead!")
                 break
             end
 
-            -- Validate local player
-            if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") then
-                sendChatMessage("❌ Local player character lost!")
-                break
-            end
-
-            local targetPos = _G.AnnoyTarget.Character.HumanoidRootPart.Position
+            local targetPos = targetCharacter.HumanoidRootPart.Position
             local myPos = humanoidRootPart.Position
-            local distance = (targetPos - myPos).Magnitude
             local deltaTime = tick() - lastUpdate
             lastUpdate = tick()
 
@@ -707,28 +677,22 @@ local function annoyTeleportLoop()
                 math.clamp(desiredPos.Z, mapBounds.min.Z, mapBounds.max.Z)
             )
 
-            if distance > 2 then
-                local maxDistance = FOLLOW_SPEED * deltaTime
-                local moveVector = (desiredPos - myPos)
-                local moveDistance = moveVector.Magnitude
-                local newPos = myPos
-                if moveDistance > maxDistance then
-                    newPos = myPos + moveVector.Unit * maxDistance
-                else
-                    newPos = desiredPos
-                end
+            -- Always attempt to position, even if target is stationary
+            local moveVector = (desiredPos - myPos)
+            local moveDistance = moveVector.Magnitude
+            local maxDistance = FOLLOW_SPEED * deltaTime
+            local newPos = moveDistance > maxDistance and (myPos + moveVector.Unit * maxDistance) or desiredPos
 
-                -- Smooth movement with velocity to avoid physics issues
-                success, err = pcall(function()
-                    local lookAtPos = Vector3.new(targetPos.X, newPos.Y, targetPos.Z)
-                    humanoidRootPart.CFrame = CFrame.new(newPos, lookAtPos)
-                    -- Apply velocity for smoother movement
-                    humanoidRootPart.Velocity = moveVector.Unit * FOLLOW_SPEED
-                end)
-                if not success then
-                    sendChatMessage("❌ Failed to update position: " .. tostring(err))
-                    break
-                end
+            -- Smooth movement with velocity to avoid physics issues
+            success, err = pcall(function()
+                local lookAtPos = Vector3.new(targetPos.X, newPos.Y, targetPos.Z)
+                humanoidRootPart.CFrame = CFrame.new(newPos, lookAtPos)
+                -- Apply velocity for smoother movement
+                humanoidRootPart.Velocity = moveVector.Unit * FOLLOW_SPEED
+            end)
+            if not success then
+                sendChatMessage("❌ Failed to update position: " .. tostring(err))
+                break
             end
 
             -- Ensure animation is playing
@@ -1521,7 +1485,7 @@ task.spawn(function()
         task.wait(2)
         _G.WaitingForPremiumResponse = true
         sendChatMessage("❓ " .. premiumPlayer.Name .. ", do you want me to server hop? Answer with 'yes' or 'no'.")
-        sendTTSMessage(premiumPlayer.Name .. ", do you want me to server hop? Answer with yes or no.", "9")
+        sendTTSMessage(premiumPlayer.Name .. ", do you want to server hop? Answer with yes or no.", "9")
 
         local responseReceived = false
         local connection
