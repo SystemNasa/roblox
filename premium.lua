@@ -19,7 +19,6 @@ return {
     "sleepinvirtual",
     "akosya0907",
     "TrenHitz",
-    "",
     "paintballkid",
     "DominixBlox",
     "DarkoXMD",
