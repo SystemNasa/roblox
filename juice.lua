@@ -14,7 +14,7 @@ local ANIMATION_ID = "rbxassetid://113820516315642"
 local ROAST_ANIMATION_ID = "rbxassetid://82965632072615"
 local PREACH_ANIMATION_ID = "rbxassetid://83375399295408"
 local FOLLOW_SPEED = 40
-local PREMIUM_RESPONSE_TIMEOUT = 20
+local PREMIUM_RESPONSE_THRESHOLD = 20
 
 -- Preach messages
 local preachMessages = {
@@ -267,7 +267,7 @@ local function httpGetWithRetry(url, maxAttempts, delay)
             return success, result
         end
         attempts = attempts + 1
-        task.wait(delay Panther)
+        task.wait(delay)
     end
     return false, "Max HTTP attempts reached"
 end
@@ -589,7 +589,7 @@ local function enableNoclip()
     table.insert(_G.ActiveTasks, taskId)
 end
 
--- Revised annoyTeleportLoop function
+-- Annoy teleport loop
 local function annoyTeleportLoop()
     local taskId = task.spawn(function()
         if not _G.AnnoyTarget or not _G.AnnoyTarget.Character or not _G.AnnoyTarget.Character:FindFirstChild("HumanoidRootPart") or not _G.AnnoyTarget.Character:FindFirstChild("Humanoid") or _G.AnnoyTarget.Character.Humanoid.Health <= 0 then
@@ -1222,7 +1222,7 @@ local function handleCommand(sender, text)
             end
 
             task.spawn(function()
-                while tick() - startTime < PREMIUM_RESPONSE_TIMEOUT and not responseReceived do
+                while tick() - startTime < PREMIUM_RESPONSE_THRESHOLD and not responseReceived do
                     if not _G.PremiumPlayer.Parent then
                         responseReceived = true
                         if connection then connection:Disconnect() end
@@ -1421,7 +1421,7 @@ local function handleCommand(sender, text)
             local preachPlayer = findPlayerByPartialName(preachName)
             if preachPlayer then
                 stopCurrentMode()
-                local avatarSuccess = copyAvatarAndGetTools("RobotScientist2")
+                copyAvatarAndGetTools("RobotScientist2")
                 _G.PreachMode = true
                 _G.PreachTarget = preachPlayer
                 task.spawn(preachTeleportLoop)
@@ -1526,7 +1526,7 @@ task.spawn(function()
         end
 
         task.spawn(function()
-            while tick() - startTime < PREMIUM_RESPONSE_TIMEOUT and not responseReceived do
+            while tick() - startTime < PREMIUM_RESPONSE_THRESHOLD and not responseReceived do
                 if not premiumPlayer.Parent then
                     responseReceived = true
                     if connection then connection:Disconnect() end
