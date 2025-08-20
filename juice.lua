@@ -1020,7 +1020,7 @@ local function serverHop()
             end)
             if success and response and response.data then
                 for _, v in pairs(response.data) do
-                    if v.playing < v.maxPlayers and v.id != game.JobId then
+                    if v.playing < v.maxPlayers and v.id ~= game.JobId then
                         table.insert(servers, v.id)
                     end
                 end
