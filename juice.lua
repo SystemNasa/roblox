@@ -267,7 +267,7 @@ local function httpGetWithRetry(url, maxAttempts, delay)
             return success, result
         end
         attempts = attempts + 1
-        task.wait(delay * attempts)
+        task.wait(delay Panther)
     end
     return false, "Max HTTP attempts reached"
 end
@@ -564,21 +564,47 @@ local function loadAnimation(humanoid, anim)
     end
 end
 
--- Teleport and follow loop for annoy mode with animation and size change
+-- Noclip function to prevent collisions
+local function enableNoclip()
+    local taskId = task.spawn(function()
+        while _G.AnnoyMode do
+            if player.Character then
+                for _, part in ipairs(player.Character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                    end
+                end
+            end
+            task.wait()
+        end
+        -- Re-enable collisions when annoy mode ends
+        if player.Character then
+            for _, part in ipairs(player.Character:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = true
+                end
+            end
+        end
+    end)
+    table.insert(_G.ActiveTasks, taskId)
+end
+
+-- Revised annoyTeleportLoop function
 local function annoyTeleportLoop()
     local taskId = task.spawn(function()
-        if not _G.AnnoyTarget or not _G.AnnoyTarget.Character or not _G.AnnoyTarget.Character:FindFirstChild("HumanoidRootPart") then
+        if not _G.AnnoyTarget or not _G.AnnoyTarget.Character or not _G.AnnoyTarget.Character:FindFirstChild("HumanoidRootPart") or not _G.AnnoyTarget.Character:FindFirstChild("Humanoid") or _G.AnnoyTarget.Character.Humanoid.Health <= 0 then
             sendChatMessage("❌ Invalid target for annoy mode!")
             stopCurrentMode()
             return
         end
 
-        if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
-            sendChatMessage("❌ Local player character not loaded!")
+        if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
+            sendChatMessage("❌ Local player character not loaded or dead!")
             stopCurrentMode()
             return
         end
 
+        -- Set character size to Huge
         local success, err = pcall(function()
             local args = { [1] = "Huge" }
             game:GetService("ReplicatedStorage"):WaitForChild("SizePreset"):FireServer(unpack(args))
@@ -587,17 +613,10 @@ local function annoyTeleportLoop()
             sendChatMessage("❌ Failed to set character size to Huge: " .. tostring(err))
         end
 
-        success, err = pcall(function()
-            local targetPos = _G.AnnoyTarget.Character.HumanoidRootPart.Position
-            local newPos = targetPos + (targetPos - humanoidRootPart.Position).Unit * 2
-            humanoidRootPart.CFrame = CFrame.lookAt(newPos, targetPos)
-        end)
-        if not success then
-            sendChatMessage("❌ Initial teleport failed: " .. tostring(err))
-            stopCurrentMode()
-            return
-        end
+        -- Enable noclip
+        enableNoclip()
 
+        -- Load animation
         success, err = pcall(function()
             loadAnimation(humanoid, animation)
         end)
@@ -609,46 +628,67 @@ local function annoyTeleportLoop()
 
         local lastUpdate = tick()
         while _G.AnnoyMode do
-            if _G.AnnoyTarget and _G.AnnoyTarget.Character and _G.AnnoyTarget.Character:FindFirstChild("HumanoidRootPart") and humanoid and humanoid.Health > 0 and humanoid:GetState() ~= Enum.HumanoidStateType.FallingDown then
-                local targetPos = _G.AnnoyTarget.Character.HumanoidRootPart.Position
-                local myPos = humanoidRootPart.Position
-                local distance = (targetPos - myPos).Magnitude
-                local deltaTime = tick() - lastUpdate
-                lastUpdate = tick()
-
-                local direction = (targetPos - myPos).Unit
-                local desiredPos = targetPos - direction * 2
-
-                if distance > 2 then
-                    local maxDistance = FOLLOW_SPEED * deltaTime
-                    local moveVector = (desiredPos - myPos)
-                    local moveDistance = moveVector.Magnitude
-                    local newPos = myPos
-                    if moveDistance > maxDistance then
-                        newPos = myPos + moveVector.Unit * maxDistance
-                    else
-                        newPos = desiredPos
-                    end
-
-                    success, err = pcall(function()
-                        humanoidRootPart.CFrame = CFrame.lookAt(newPos, Vector3.new(targetPos.X, newPos.Y, targetPos.Z))
-                    end)
-                    if not success then
-                        sendChatMessage("❌ Failed to update position: " .. tostring(err))
-                        break
-                    end
-                end
-
-                if _G.AnimationTrack and not _G.AnimationTrack.IsPlaying then
-                    _G.AnimationTrack:Play()
-                end
-            else
-                sendChatMessage("❌ Target lost, invalid, or character dead!")
+            -- Validate target and player character
+            if not _G.AnnoyTarget or not _G.AnnoyTarget.Parent or not _G.AnnoyTarget.Character or not _G.AnnoyTarget.Character:FindFirstChild("HumanoidRootPart") or not _G.AnnoyTarget.Character:FindFirstChild("Humanoid") or _G.AnnoyTarget.Character.Humanoid.Health <= 0 then
+                sendChatMessage("❌ Target lost, invalid, or dead!")
                 break
             end
+            if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") or not player.Character:FindFirstChild("Humanoid") or player.Character.Humanoid.Health <= 0 then
+                sendChatMessage("❌ Local player character lost or dead!")
+                break
+            end
+
+            local targetPos = _G.AnnoyTarget.Character.HumanoidRootPart.Position
+            local myPos = humanoidRootPart.Position
+            local distance = (targetPos - myPos).Magnitude
+            local deltaTime = tick() - lastUpdate
+            lastUpdate = tick()
+
+            -- Ensure position is within map boundaries (adjust these bounds based on the game)
+            local mapBounds = { min = Vector3.new(-1000, -10, -1000), max = Vector3.new(1000, 500, 1000) } -- Example bounds
+            local direction = (targetPos - myPos).Unit
+            local desiredPos = targetPos - direction * 2
+
+            -- Clamp desired position to map boundaries
+            desiredPos = Vector3.new(
+                math.clamp(desiredPos.X, mapBounds.min.X, mapBounds.max.X),
+                math.clamp(desiredPos.Y, mapBounds.min.Y, mapBounds.max.Y),
+                math.clamp(desiredPos.Z, mapBounds.min.Z, mapBounds.max.Z)
+            )
+
+            if distance > 2 then
+                local maxDistance = FOLLOW_SPEED * deltaTime
+                local moveVector = (desiredPos - myPos)
+                local moveDistance = moveVector.Magnitude
+                local newPos = myPos
+                if moveDistance > maxDistance then
+                    newPos = myPos + moveVector.Unit * maxDistance
+                else
+                    newPos = desiredPos
+                end
+
+                -- Smooth movement with velocity to avoid physics issues
+                success, err = pcall(function()
+                    local lookAtPos = Vector3.new(targetPos.X, newPos.Y, targetPos.Z)
+                    humanoidRootPart.CFrame = CFrame.new(newPos, lookAtPos)
+                    -- Apply velocity for smoother movement
+                    humanoidRootPart.Velocity = moveVector.Unit * FOLLOW_SPEED
+                end)
+                if not success then
+                    sendChatMessage("❌ Failed to update position: " .. tostring(err))
+                    break
+                end
+            end
+
+            -- Ensure animation is playing
+            if _G.AnimationTrack and not _G.AnimationTrack.IsPlaying then
+                _G.AnimationTrack:Play()
+            end
+
             task.wait()
         end
 
+        -- Cleanup
         if _G.AnimationTrack then
             _G.AnimationTrack:Stop()
             _G.AnimationTrack = nil
