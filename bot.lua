@@ -352,7 +352,7 @@ end
 
 local function teleportToSafeLocation()
     -- Teleport to safe location where bot won't be seen or reported
-    local safeLocation = CFrame.new(607.292114, 8151.999512, 3483.111084, 3505.633057, -8151.999512, -459.786926, -0.042194, 0.000000, -0.999109, -0.000000, 1.000000, 0.000000)
+    local safeLocation = CFrame.new(718.295898, 910.449951, -181.603394, -180.655075, -910.449951, -718.534912, -0.001320, 0.000000, -0.999999, -0.000000, 1.000000, 0.000000)
     
     if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
         pcall(function()
