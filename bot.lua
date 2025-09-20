@@ -333,14 +333,22 @@ local function startLagging()
     botState.status = "LAGGING"
     log("Starting lag attack for " .. botState.currentDuration .. " seconds", "ATTACK")
     
-    -- Copy avatar and get tools for lagging (like lag.lua)
+    -- FIRST: Remove targeted items to prevent bot client lag
+    if player.Character then
+        removeTargetedItems(player.Character)
+        log("Removed targeted items from bot to prevent client lag", "ATTACK")
+        wait(0.5) -- Give it a moment to process
+    end
+    
+    -- THEN: Copy avatar and get tools for lagging
     copyAvatarAndGetTools("24k_mxtty1")
     
     -- Start tool cycling loop only (no teleportation or TTS)
     toolCycleLoop()
     
-    -- Set lag end time
+    -- Set lag end time (this should only happen ONCE per attack)
     botState.lagEndTime = tick() + botState.currentDuration
+    log("Lag will end at: " .. botState.lagEndTime .. " (duration: " .. botState.currentDuration .. "s)", "ATTACK")
 end
 
 local function stopLagging()
@@ -453,11 +461,7 @@ local function checkLagDuration()
         end
     end
     
-    -- Check if we're in a target server after teleport and need to start lagging
-    if botState.status == "IN_SERVER" and botState.currentTarget and not botState.isLagging then
-        log("Resumed in target server, starting lag attack", "ATTACK")
-        startLagging()
-    end
+    -- REMOVED THE PROBLEMATIC RESTART LOGIC - lag should only start once per attack
 end
 
 -- Main loops
