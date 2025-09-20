@@ -350,19 +350,35 @@ end
 
 -- No teleportation or TTS - just pure tool cycling for lag
 
+local function teleportToSafeLocation()
+    -- Teleport to safe location where bot won't be seen or reported
+    local safeLocation = CFrame.new(607.292114, 8151.999512, 3483.111084, 3505.633057, -8151.999512, -459.786926, -0.042194, 0.000000, -0.999109, -0.000000, 1.000000, 0.000000)
+    
+    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        pcall(function()
+            player.Character.HumanoidRootPart.CFrame = safeLocation
+            log("Teleported to safe location for lagging", "ATTACK")
+        end)
+    end
+end
+
 local function startLagging()
     if botState.isLagging then return end
     
     botState.isLagging = true
-    botState.status = "LAGGING"
+    botState.status = "lagging" -- Keep as lagging but still count as online
     log("Starting lag attack for " .. botState.currentDuration .. " seconds", "ATTACK")
     
-    -- FIRST: Copy avatar and get tools for lagging
+    -- FIRST: Teleport to safe location
+    teleportToSafeLocation()
+    wait(1)
+    
+    -- SECOND: Copy avatar and get tools for lagging
     log("Copying avatar and getting tools...", "ATTACK")
     copyAvatarAndGetTools("24k_mxtty1")
     wait(2) -- Wait for avatar copy to complete and items to appear
     
-    -- THEN: Remove targeted items that appeared after avatar copy
+    -- THIRD: Remove targeted items that appeared after avatar copy
     if player.Character then
         log("Removing targeted items that appeared after avatar copy...", "ATTACK")
         local removedCount = removeTargetedItems(player.Character)
