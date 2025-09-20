@@ -352,11 +352,13 @@ end
 
 local function teleportToSafeLocation()
     -- Teleport to safe location where bot won't be seen or reported
-    local safeLocation = CFrame.new(718.295898, 910.449951, -181.603394, -180.655075, -910.449951, -718.534912, -0.001320, 0.000000, -0.999999, -0.000000, 1.000000, 0.000000)
+    local safePosition = Vector3.new(718.295898, 910.449951, -181.603394)
+    local safeLocation = CFrame.new(safePosition) -- Simple position-only CFrame to avoid rotation issues
     
     if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
         pcall(function()
             player.Character.HumanoidRootPart.CFrame = safeLocation
+            player.Character.HumanoidRootPart.Anchored = false -- Ensure not anchored
             log("Teleported to safe location for lagging", "ATTACK")
         end)
     end
