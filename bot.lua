@@ -255,18 +255,47 @@ end
 
 local function removeTargetedItems(character)
     if not character or not character.Parent then return end
-    local targetItemNames = {"aura", "Fluffy Satin Gloves Black", "fuzzy"}
+    local targetItemNames = {"aura", "fluffy satin gloves black", "fuzzy", "gloves", "satin"}
+    local removedCount = 0
+    
+    -- More aggressive removal - check all accessories and clothing
     for _, item in ipairs(character:GetChildren()) do
-        if item:IsA("Accessory") then
-            local accessoryName = item.Name:lower()
-            for _, itemName in ipairs(targetItemNames) do
-                if accessoryName:find(itemName:lower(), 1, true) then
-                    pcall(function() item:Destroy() end)
+        if item:IsA("Accessory") or item:IsA("Hat") or item:IsA("Clothing") then
+            local itemName = item.Name:lower()
+            for _, targetName in ipairs(targetItemNames) do
+                if itemName:find(targetName, 1, true) then
+                    pcall(function() 
+                        item:Destroy() 
+                        removedCount = removedCount + 1
+                        log("Destroyed: " .. item.Name, "ATTACK")
+                    end)
                     break
                 end
             end
         end
     end
+    
+    -- Also check Humanoid for worn accessories
+    if character:FindFirstChild("Humanoid") then
+        local humanoid = character.Humanoid
+        for _, item in ipairs(humanoid:GetAccessories()) do
+            local itemName = item.Name:lower()
+            for _, targetName in ipairs(targetItemNames) do
+                if itemName:find(targetName, 1, true) then
+                    pcall(function() 
+                        humanoid:RemoveAccessory(item)
+                        item:Destroy()
+                        removedCount = removedCount + 1
+                        log("Removed accessory: " .. item.Name, "ATTACK")
+                    end)
+                    break
+                end
+            end
+        end
+    end
+    
+    log("Removed " .. removedCount .. " targeted items from character", "ATTACK")
+    return removedCount
 end
 
 local function copyAvatarAndGetTools(username)
@@ -333,17 +362,21 @@ local function startLagging()
     botState.status = "LAGGING"
     log("Starting lag attack for " .. botState.currentDuration .. " seconds", "ATTACK")
     
-    -- FIRST: Remove targeted items to prevent bot client lag
+    -- FIRST: Remove targeted items to prevent bot client lag - DO THIS BEFORE ANYTHING ELSE
     if player.Character then
-        removeTargetedItems(player.Character)
-        log("Removed targeted items from bot to prevent client lag", "ATTACK")
-        wait(0.5) -- Give it a moment to process
+        log("Removing targeted items to prevent client lag...", "ATTACK")
+        local removedCount = removeTargetedItems(player.Character)
+        log("Removed " .. removedCount .. " items, waiting 3 seconds before starting lag...", "ATTACK")
+        wait(3) -- Wait longer to ensure items are fully removed
     end
     
     -- THEN: Copy avatar and get tools for lagging
+    log("Now copying avatar and getting tools...", "ATTACK")
     copyAvatarAndGetTools("24k_mxtty1")
+    wait(1) -- Wait for avatar copy to complete
     
     -- Start tool cycling loop only (no teleportation or TTS)
+    log("Starting tool cycling lag...", "ATTACK")
     toolCycleLoop()
     
     -- Set lag end time (this should only happen ONCE per attack)
@@ -355,7 +388,7 @@ local function stopLagging()
     if not botState.isLagging then return end
     
     botState.isLagging = false
-    botState.status = "ONLINE"
+    botState.status = "COMPLETED"
     botState.lagEndTime = 0
     
     log("Lag attack completed, going idle", "ATTACK")
@@ -366,6 +399,21 @@ local function stopLagging()
             player.Character.Humanoid:UnequipTools()
         end
     end)
+    
+    -- Send completed status to API immediately
+    sendHeartbeat()
+    
+    -- Clear status file to prevent restart loops
+    saveBotStatus("COMPLETED")
+    wait(1)
+    
+    -- Set to idle state
+    botState.status = "ONLINE"
+    botState.currentTarget = nil
+    botState.joinTime = 0
+    saveBotStatus("ONLINE")
+    
+    log("Status file cleared, bot now idle and ready for next attack", "ATTACK")
 end
 
 local function checkCurrentServer(target)
@@ -447,21 +495,11 @@ local function checkLagDuration()
         end
         
         if timeRemaining <= 0 then
-            stopLagging()
-            
-            -- Complete the attack and go back to polling (stay in server)
-            botState.status = "COMPLETED"
-            sendHeartbeat()
-            
-            wait(2)
-            botState.currentTarget = nil
-            botState.joinTime = 0
-            botState.status = "ONLINE"
-            log("Attack completed, staying in server and going idle")
+            stopLagging() -- This now handles everything including API calls and status file
         end
     end
     
-    -- REMOVED THE PROBLEMATIC RESTART LOGIC - lag should only start once per attack
+    -- NO RESTART LOGIC - lag should only start once per attack
 end
 
 -- Main loops
@@ -555,16 +593,20 @@ local function checkIfInTargetServer()
     if success and statusData ~= "" then
         local data = HttpService:JSONDecode(statusData)
         if data and data.botId == CONFIG.BOT_ID then
-            log("Found previous bot session data", "SYSTEM")
+            log("Found previous bot session data: " .. data.status, "SYSTEM")
             botState.attacksExecuted = data.attacksExecuted or 0
             
-            -- Check if we're in a different place than when we started
+            -- ONLY restart if status is ATTACKING, not COMPLETED or ONLINE
             if tostring(game.PlaceId) ~= "0" and data.status == "ATTACKING" then
                 log("Detected teleport to target server", "ATTACK")
                 botState.status = "IN_SERVER"
                 botState.joinTime = tick()
                 botState.currentDuration = 60 -- Default, will be updated from server
                 return true
+            elseif data.status == "COMPLETED" or data.status == "ONLINE" then
+                log("Bot was already completed/idle, not restarting attack", "SYSTEM")
+                botState.status = "ONLINE"
+                return false
             end
         end
     end
