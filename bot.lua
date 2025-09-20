@@ -1,3 +1,7 @@
+-- Advanced Stresser Bot Client v3.0
+-- Cloud-hosted automated bot with executor compatibility and duration tracking
+
+-- Check if script has already been executed using a global flag
 if _G.StresserBotExecuted then
     warn("Stresser Bot is already running!")
     return
@@ -207,6 +211,11 @@ end
 local function getTarget()
     if not botState.isActive then return nil end
     
+    -- Don't request new targets if already lagging
+    if botState.isLagging or botState.status == "LAGGING" then
+        return nil
+    end
+    
     local success, response = makeRequest("/get-task?botId=" .. CONFIG.BOT_ID, "GET")
     
     if success and response.Success then
@@ -304,9 +313,7 @@ local function copyAvatarAndGetTools(username)
         log("Proceeding with tool acquisition despite avatar copy failure for " .. username, "WARN")
     end
 
-    if username == "24k_mxtty1" and player.Character then
-        pcall(removeTargetedItems, player.Character)
-    end
+    -- DON'T remove items here - they should already be removed in startLagging()
 
     local tools = {
         "DangerCarot",
@@ -519,8 +526,14 @@ local function targetPollingLoop()
             else
                 log("No targets available, waiting...")
             end
+        elseif botState.status == "LAGGING" then
+            -- Only check lag duration when lagging, don't poll for new targets
+            checkLagDuration()
+        elseif botState.status == "ATTACKING" or botState.status == "TELEPORTING" then
+            -- Don't poll when attacking or teleporting
+            wait(1)
         else
-            -- Always check lag duration and target server status
+            -- For other statuses, check lag duration
             checkLagDuration()
         end
         
