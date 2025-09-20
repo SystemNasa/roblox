@@ -1,7 +1,3 @@
--- Advanced Stresser Bot Client v3.0
--- Cloud-hosted automated bot with executor compatibility and duration tracking
-
--- Check if script has already been executed using a global flag
 if _G.StresserBotExecuted then
     warn("Stresser Bot is already running!")
     return
