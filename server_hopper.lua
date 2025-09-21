@@ -16,9 +16,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CONFIG = {
     LAG_DURATION = 50, -- 50 seconds per server
     SCRIPT_URL = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/server_hopper.lua", -- Update this to your script URL
-    TOOL_CYCLE_DELAY = 0.05, -- Very fast tool cycling
+    TOOL_CYCLE_DELAY = 0.01, -- Very fast tool cycling
     CHAT_INTERVAL = 15, -- Chat scary message every 15 seconds
-    MAX_RETRIES = 3 -- Max retries for server hop
+    MAX_RETRIES = 10 -- Max retries for server hop
 }
 
 local player = Players.LocalPlayer
