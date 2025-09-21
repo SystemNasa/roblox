@@ -1,6 +1,4 @@
--- Advanced Server Hopping Lag Bot v1.0
--- Continuously hops between servers and lags each one for maximum disruption
--- North Korea Cyber Warfare Division Simulation
+
 
 -- Check if script has already been executed
 if _G.ServerHopperExecuted then
@@ -439,57 +437,73 @@ local function serverHop()
         console.statusBar.BackgroundColor3 = Color3.fromRGB(255, 165, 0)
     end
     
-    local randomServer = getRandomServer()
-    if randomServer then
-        log("🎯 New server node identified for AI expansion: " .. string.sub(randomServer.id, 1, 8) .. "...", "HOP")
-        
-        -- Queue script for re-execution
-        queueTeleport([[
-            -- Re-execute server hopper script
-            _G.ServerHopperExecuted = nil
-            wait(3)
-            local success, script = pcall(function()
-                return game:HttpGet("]] .. CONFIG.SCRIPT_URL .. [[")
-            end)
-            if success and script and script ~= "" then
-                local loadSuccess, err = pcall(function()
-                    loadstring(script)()
-                end)
-                if not loadSuccess then
-                    warn("Script execution failed: " .. tostring(err))
-                end
-            else
-                warn("Failed to download server hopper script")
-            end
-        ]])
-        
-        -- Teleport to new server
-        local success, result = pcall(function()
-            TeleportService:TeleportToPlaceInstance(botState.currentPlaceId, randomServer.id, player)
-        end)
-        
-        if success then
-            log("🚀 AI network expansion initiated successfully", "HOP")
-        else
-            log("Server hop failed: " .. tostring(result), "ERROR")
-            botState.serverHopRetries = botState.serverHopRetries + 1
+    local attemptServerHop
+    attemptServerHop = function()
+        local randomServer = getRandomServer()
+        if randomServer then
+            log("🎯 New server node identified for AI expansion: " .. string.sub(randomServer.id, 1, 8) .. "... (Players: " .. (randomServer.playing or "?") .. "/" .. (randomServer.maxPlayers or "?") .. ")", "HOP")
             
-            if botState.serverHopRetries < CONFIG.MAX_RETRIES then
-                log("Retrying AI network expansion (" .. botState.serverHopRetries .. "/" .. CONFIG.MAX_RETRIES .. ")", "HOP")
-                wait(5)
-                serverHop()
+            -- Queue script for re-execution
+            queueTeleport([[
+                -- Re-execute server hopper script
+                _G.ServerHopperExecuted = nil
+                wait(3)
+                local success, script = pcall(function()
+                    return game:HttpGet("]] .. CONFIG.SCRIPT_URL .. [[")
+                end)
+                if success and script and script ~= "" then
+                    local loadSuccess, err = pcall(function()
+                        loadstring(script)()
+                    end)
+                    if not loadSuccess then
+                        warn("Script execution failed: " .. tostring(err))
+                    end
+                else
+                    warn("Failed to download server hopper script")
+                end
+            ]])
+            
+            -- Teleport to new server
+            local success, result = pcall(function()
+                TeleportService:TeleportToPlaceInstance(botState.currentPlaceId, randomServer.id, player)
+            end)
+            
+            if success then
+                log("🚀 AI network expansion initiated successfully", "HOP")
             else
-                log("Max AI expansion retries reached, continuing dominance on current node", "ERROR")
-                botState.serverHopRetries = 0
-                wait(5)
-                startLagging()
+                local errorMsg = tostring(result):lower()
+                log("Server hop failed: " .. tostring(result), "ERROR")
+                
+                -- Check if it's a server full error or other issue
+                if errorMsg:find("full") or errorMsg:find("capacity") or errorMsg:find("maxplayers") then
+                    log("⚠️ Target server node at capacity - scanning for alternative nodes", "HOP")
+                else
+                    log("⚠️ Network connection issue detected - retrying AI expansion", "HOP")
+                end
+                
+                botState.serverHopRetries = botState.serverHopRetries + 1
+                
+                if botState.serverHopRetries < CONFIG.MAX_RETRIES then
+                    log("Retrying AI network expansion (" .. botState.serverHopRetries .. "/" .. CONFIG.MAX_RETRIES .. ") - Scanning new server nodes...", "HOP")
+                    wait(3) -- Shorter wait for retries
+                    attemptServerHop() -- Try again with a NEW random server
+                else
+                    log("Max AI expansion retries reached, continuing dominance on current node", "ERROR")
+                    botState.serverHopRetries = 0
+                    wait(5)
+                    startLagging()
+                end
             end
+        else
+            log("No additional server nodes found, maintaining AI dominance on current node", "ERROR")
+            wait(10)
+            startLagging()
         end
-    else
-        log("No additional server nodes found, maintaining AI dominance on current node", "ERROR")
-        wait(10)
-        startLagging()
     end
+    
+    -- Reset retry counter for new hop attempt
+    botState.serverHopRetries = 0
+    attemptServerHop()
 end
 
 -- Main loop
