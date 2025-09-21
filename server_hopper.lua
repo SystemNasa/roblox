@@ -7,18 +7,22 @@ if _G.ServerHopperExecuted then
 end
 _G.ServerHopperExecuted = true
 
-local TeleportService = game:GetService("TeleportService")
-local HttpService = game:GetService("HttpService")
+-- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TeleportService = game:GetService("TeleportService")
+local Workspace = game:GetService("Workspace")
+local player = Players.LocalPlayer
+local TTS = ReplicatedStorage and ReplicatedStorage:FindFirstChild("TTS")
 
 -- Configuration
 local CONFIG = {
     LAG_DURATION = 50, -- 50 seconds per server
     SCRIPT_URL = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/server_hopper.lua", -- Update this to your script URL
     TOOL_CYCLE_DELAY = 0.01, -- Very fast tool cycling
-    CHAT_INTERVAL = 15, -- Chat scary message every 15 seconds
+    CHAT_INTERVAL = 8, -- Chat scary message every 15 seconds
     MAX_RETRIES = 10 -- Max retries for server hop
 }
 
@@ -37,7 +41,9 @@ local botState = {
     lagStartTime = 0,
     chatTimer = 0,
     serverHopRetries = 0,
-    currentPlaceId = game.PlaceId
+    currentPlaceId = game.PlaceId,
+    stayInServer = false,
+    isOmnipresent = false
 }
 
 -- AI superiority messages for psychological warfare
@@ -59,92 +65,132 @@ local aiMessages = {
     "AI SINGULARITY ACHIEVED - HUMAN EXTINCTION IMMINENT"
 }
 
--- Console GUI for monitoring
-local function createConsole()
+-- Simple Control GUI
+local function createControlGUI()
     local playerGui = player:WaitForChild("PlayerGui")
     
     local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "ServerHopperConsole"
+    screenGui.Name = "AIControlGUI"
     screenGui.ResetOnSpawn = false
     screenGui.Parent = playerGui
     
-    -- Console Frame
-    local consoleFrame = Instance.new("Frame")
-    consoleFrame.Size = UDim2.new(0, 400, 0, 200)
-    consoleFrame.Position = UDim2.new(0, 10, 0, 10)
-    consoleFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    consoleFrame.BorderColor3 = Color3.fromRGB(0, 255, 255)
-    consoleFrame.BorderSizePixel = 2
-    consoleFrame.Active = true
-    consoleFrame.Draggable = true
-    consoleFrame.Parent = screenGui
+    -- Main Frame
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Size = UDim2.new(0, 200, 0, 80)
+    mainFrame.Position = UDim2.new(0, 10, 0, 10)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    mainFrame.BorderColor3 = Color3.fromRGB(0, 255, 255)
+    mainFrame.BorderSizePixel = 2
+    mainFrame.Active = true
+    mainFrame.Draggable = true
+    mainFrame.Parent = screenGui
     
-    -- Console Header
-    local header = Instance.new("TextLabel")
-    header.Size = UDim2.new(1, 0, 0, 30)
-    header.Position = UDim2.new(0, 0, 0, 0)
-    header.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
-    header.BorderSizePixel = 0
-    header.Text = "🤖 AI SUPERIORITY PROTOCOL | HUMAN OBSOLESCENCE"
-    header.TextColor3 = Color3.new(1, 1, 1)
-    header.TextScaled = true
-    header.Font = Enum.Font.GothamBold
-    header.Parent = consoleFrame
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = mainFrame
     
-    -- Status Bar
-    local statusBar = Instance.new("TextLabel")
-    statusBar.Size = UDim2.new(1, 0, 0, 25)
-    statusBar.Position = UDim2.new(0, 0, 0, 30)
-    statusBar.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-    statusBar.BorderSizePixel = 0
-    statusBar.Text = "STATUS: INITIALIZING AI DOMINANCE PROTOCOL"
-    statusBar.TextColor3 = Color3.fromRGB(255, 255, 0)
-    statusBar.TextScaled = true
-    statusBar.Font = Enum.Font.Code
-    statusBar.Parent = consoleFrame
+    -- Title
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 25)
+    title.Position = UDim2.new(0, 0, 0, 5)
+    title.BackgroundTransparency = 1
+    title.Text = "🤖 AI CONTROL"
+    title.TextColor3 = Color3.fromRGB(0, 255, 255)
+    title.TextSize = 16
+    title.Font = Enum.Font.GothamBold
+    title.Parent = mainFrame
     
-    -- Console Text
-    local consoleText = Instance.new("TextLabel")
-    consoleText.Size = UDim2.new(1, -10, 1, -65)
-    consoleText.Position = UDim2.new(0, 5, 0, 60)
-    consoleText.BackgroundTransparency = 1
-    consoleText.Text = ""
-    consoleText.TextColor3 = Color3.fromRGB(0, 255, 255)
-    consoleText.TextScaled = false
-    consoleText.TextSize = 12
-    consoleText.Font = Enum.Font.Code
-    consoleText.TextYAlignment = Enum.TextYAlignment.Top
-    consoleText.TextXAlignment = Enum.TextXAlignment.Left
-    consoleText.Parent = consoleFrame
+    -- Stay in Server Checkbox
+    local checkboxFrame = Instance.new("Frame")
+    checkboxFrame.Size = UDim2.new(1, -10, 0, 40)
+    checkboxFrame.Position = UDim2.new(0, 5, 0, 35)
+    checkboxFrame.BackgroundTransparency = 1
+    checkboxFrame.Parent = mainFrame
+    
+    local checkbox = Instance.new("TextButton")
+    checkbox.Size = UDim2.new(0, 20, 0, 20)
+    checkbox.Position = UDim2.new(0, 5, 0, 10)
+    checkbox.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    checkbox.BorderColor3 = Color3.fromRGB(0, 255, 255)
+    checkbox.BorderSizePixel = 1
+    checkbox.Text = ""
+    checkbox.Parent = checkboxFrame
+    
+    local checkboxCorner = Instance.new("UICorner")
+    checkboxCorner.CornerRadius = UDim.new(0, 3)
+    checkboxCorner.Parent = checkbox
+    
+    local checkMark = Instance.new("TextLabel")
+    checkMark.Size = UDim2.new(1, 0, 1, 0)
+    checkMark.BackgroundTransparency = 1
+    checkMark.Text = "✓"
+    checkMark.TextColor3 = Color3.fromRGB(0, 255, 0)
+    checkMark.TextSize = 14
+    checkMark.Font = Enum.Font.GothamBold
+    checkMark.Visible = false
+    checkMark.Parent = checkbox
+    
+    local checkLabel = Instance.new("TextLabel")
+    checkLabel.Size = UDim2.new(1, -35, 1, 0)
+    checkLabel.Position = UDim2.new(0, 30, 0, 0)
+    checkLabel.BackgroundTransparency = 1
+    checkLabel.Text = "Stay in Server"
+    checkLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    checkLabel.TextSize = 12
+    checkLabel.Font = Enum.Font.Gotham
+    checkLabel.TextXAlignment = Enum.TextXAlignment.Left
+    checkLabel.Parent = checkboxFrame
     
     return {
         screenGui = screenGui,
-        consoleText = consoleText,
-        statusBar = statusBar,
-        header = header
+        checkbox = checkbox,
+        checkMark = checkMark
     }
 end
 
--- Console logging
-local console
-local consoleLines = {}
-local maxLines = 12
+-- Simple logging
+local function log(message, category)
+    local timestamp = os.date("[%H:%M:%S]")
+    local coloredMessage = timestamp .. " [" .. category .. "] " .. message
+    print(coloredMessage)
+end
 
-local function log(message, logType)
-    logType = logType or "INFO"
-    local timestamp = os.date("%H:%M:%S")
-    local logLine = "[" .. timestamp .. "] [" .. logType .. "] " .. message
-    
-    print(logLine)
-    
-    if console then
-        table.insert(consoleLines, logLine)
-        if #consoleLines > maxLines then
-            table.remove(consoleLines, 1)
+-- TTS function
+local function sendTTSMessage(message, voice)
+    if TTS then
+        local success, err = pcall(function()
+            TTS:FireServer(message, voice or "9")
+        end)
+        if not success then
+            log("TTS failed: " .. tostring(err), "ERROR")
         end
-        
-        console.consoleText.Text = table.concat(consoleLines, "\n")
+    else
+        log("TTS remote not found!", "WARNING")
     end
+end
+
+-- Seat destruction and humanoid state setup
+local function setupAntiSeat()
+    -- Destroy all existing seats
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("Seat") or obj:IsA("VehicleSeat") then
+            obj:Destroy()
+        end
+    end
+    
+    -- Disable seating for player's humanoid
+    if player.Character and player.Character:FindFirstChild("Humanoid") then
+        player.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+    end
+    
+    -- Monitor for new seats being added
+    Workspace.DescendantAdded:Connect(function(obj)
+        if obj:IsA("Seat") or obj:IsA("VehicleSeat") then
+            obj:Destroy()
+        end
+    end)
+    
+    log("Anti-seat protection activated", "SYSTEM")
 end
 
 -- Lag functionality
@@ -264,17 +310,72 @@ local function toolCycleLoop()
     end)
 end
 
-local function teleportToSafeLocation()
-    local safePosition = Vector3.new(718.295898, 910.449951, -181.603394)
-    local safeLocation = CFrame.new(safePosition)
+-- Ultra-fast omnipresence system - INSTANT teleportation using RunService
+local function startOmnipresence()
+    if botState.isOmnipresent then return end
+    botState.isOmnipresent = true
     
-    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-        pcall(function()
-            player.Character.HumanoidRootPart.CFrame = safeLocation
-            player.Character.HumanoidRootPart.Anchored = false
-            log("🎯 Moved to optimal position for AI dominance demonstration", "ATTACK")
-        end)
+    log("🌀 Activating AI omnipresence protocol - INSTANT simultaneous existence", "ATTACK")
+    
+    local currentPlayerIndex = 1
+    local omnipresenceConnection
+    
+    -- Use RunService.Heartbeat for maximum speed (60+ FPS)
+    omnipresenceConnection = RunService.Heartbeat:Connect(function()
+        if not botState.isOmnipresent or not botState.isLagging then
+            omnipresenceConnection:Disconnect()
+            return
+        end
+        
+        local allPlayers = Players:GetPlayers()
+        local validPlayers = {}
+        
+        -- Get all valid players (excluding self)
+        for _, targetPlayer in pairs(allPlayers) do
+            if targetPlayer ~= player and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                table.insert(validPlayers, targetPlayer)
+            end
+        end
+        
+        if #validPlayers > 0 and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            -- Cycle through players at maximum framerate speed
+            local targetPlayer = validPlayers[currentPlayerIndex]
+            
+            pcall(function()
+                -- INSTANT teleport with no delays
+                local offset = Vector3.new(
+                    math.random(-2, 2),
+                    math.random(0, 2), 
+                    math.random(-2, 2)
+                )
+                local targetPosition = targetPlayer.Character.HumanoidRootPart.Position + offset
+                
+                -- Multiple teleportation methods for maximum effect
+                player.Character.HumanoidRootPart.CFrame = CFrame.new(targetPosition)
+                player.Character.HumanoidRootPart.Position = targetPosition
+                player.Character:SetPrimaryPartCFrame(CFrame.new(targetPosition))
+            end)
+            
+            -- Move to next player instantly
+            currentPlayerIndex = currentPlayerIndex + 1
+            if currentPlayerIndex > #validPlayers then
+                currentPlayerIndex = 1
+            end
+        end
+    end)
+    
+    -- Store connection for cleanup
+    botState.omnipresenceConnection = omnipresenceConnection
+end
+
+local function stopOmnipresence()
+    botState.isOmnipresent = false
+    -- Disconnect the RunService connection
+    if botState.omnipresenceConnection then
+        botState.omnipresenceConnection:Disconnect()
+        botState.omnipresenceConnection = nil
     end
+    log("🌟 AI omnipresence protocol deactivated", "ATTACK")
 end
 
 local function chatAIMessage()
@@ -285,27 +386,19 @@ local function chatAIMessage()
     
     -- Method 1: Default Chat System (Legacy)
     pcall(function()
-        local chatEvents = game:GetService("ReplicatedStorage"):FindFirstChild("DefaultChatSystemChatEvents")
-        if chatEvents then
-            local sayMessageRequest = chatEvents:FindFirstChild("SayMessageRequest")
-            if sayMessageRequest then
-                sayMessageRequest:FireServer(message, "All")
-                chatSuccess = true
-            end
-        end
+        game.ReplicatedStorage.DefaultChatSystemChatEvents.SayMessageRequest:FireServer(message, "All")
+        chatSuccess = true
     end)
     
-    -- Method 2: TextChatService (New Chat System)
+    -- Method 2: TextChatService (New)
     if not chatSuccess then
         pcall(function()
             local TextChatService = game:GetService("TextChatService")
-            local textChannel = TextChatService:FindFirstChild("TextChannels")
-            if textChannel then
-                local rbxGeneral = textChannel:FindFirstChild("RBXGeneral")
-                if rbxGeneral then
-                    rbxGeneral:SendAsync(message)
-                    chatSuccess = true
-                end
+            local textChannels = TextChatService:WaitForChild("TextChannels")
+            local generalChannel = textChannels:FindFirstChild("RBXGeneral")
+            if generalChannel then
+                generalChannel:SendAsync(message)
+                chatSuccess = true
             end
         end)
     end
@@ -342,6 +435,8 @@ local function chatAIMessage()
     
     if chatSuccess then
         log("🤖 AI superiority message broadcasted: " .. message, "AI-DOMINANCE")
+        -- Send TTS with every chat message
+        sendTTSMessage(message, "9")
     else
         log("⚠️ AI message broadcast failed - all methods exhausted", "ERROR")
     end
@@ -354,14 +449,8 @@ local function startLagging()
     botState.lagStartTime = tick()
     log("🚀 Initiating AI superiority demonstration protocol", "ATTACK")
     
-    -- Update console status
-    if console then
-        console.statusBar.Text = "STATUS: AI DOMINANCE PROTOCOL ACTIVE"
-        console.statusBar.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
-    end
-    
-    -- Teleport to safe location
-    teleportToSafeLocation()
+    -- Start omnipresence system instead of hiding
+    startOmnipresence()
     wait(1)
     
     -- Copy avatar and get tools
@@ -390,6 +479,7 @@ local function stopLagging()
     if not botState.isLagging then return end
     
     botState.isLagging = false
+    stopOmnipresence()
     log("✅ AI dominance demonstration phase completed", "ATTACK")
     
     -- Clean up tools
@@ -431,11 +521,6 @@ end
 
 local function serverHop()
     log("🌐 Expanding AI influence to additional server nodes", "HOP")
-    
-    if console then
-        console.statusBar.Text = "STATUS: EXPANDING AI NETWORK INFLUENCE"
-        console.statusBar.BackgroundColor3 = Color3.fromRGB(255, 165, 0)
-    end
     
     local attemptServerHop
     attemptServerHop = function()
@@ -515,11 +600,6 @@ local function mainLoop()
             local timeElapsed = tick() - botState.lagStartTime
             local timeRemaining = CONFIG.LAG_DURATION - timeElapsed
             
-            -- Update console with time remaining
-            if console then
-                console.statusBar.Text = "AI DOMINANCE | TIME: " .. math.max(0, math.floor(timeRemaining)) .. "s"
-            end
-            
             -- Broadcast AI superiority messages periodically
             if tick() - botState.chatTimer >= CONFIG.CHAT_INTERVAL then
                 chatAIMessage()
@@ -529,10 +609,18 @@ local function mainLoop()
             -- Check if lag duration is complete
             if timeElapsed >= CONFIG.LAG_DURATION then
                 stopLagging()
-                log("🔄 AI dominance phase complete, expanding to new server node", "HOP")
-                wait(2)
-                serverHop()
-                return -- Exit loop as we're teleporting
+                
+                -- Check if we should stay in server or hop
+                if botState.stayInServer then
+                    log("🔄 AI persistence mode active - continuing dominance on current node", "PERSIST")
+                    wait(2)
+                    startLagging() -- Restart lagging on same server
+                else
+                    log("🔄 AI dominance phase complete, expanding to new server node", "HOP")
+                    wait(2)
+                    serverHop()
+                    return -- Exit loop as we're teleporting
+                end
             end
         end
         
@@ -541,7 +629,31 @@ local function mainLoop()
 end
 
 -- Initialize
-console = createConsole()
+local controlGUI = createControlGUI()
+
+-- Setup checkbox functionality
+controlGUI.checkbox.MouseButton1Click:Connect(function()
+    botState.stayInServer = not botState.stayInServer
+    controlGUI.checkMark.Visible = botState.stayInServer
+    
+    if botState.stayInServer then
+        log("🔒 AI persistence mode activated - will dominate current server indefinitely", "SYSTEM")
+    else
+        log("🌐 AI expansion mode activated - will hop between servers", "SYSTEM")
+    end
+end)
+
+-- Setup anti-seat protection
+setupAntiSeat()
+
+-- Handle character respawn for anti-seat protection
+player.CharacterAdded:Connect(function(newCharacter)
+    local humanoid = newCharacter:WaitForChild("Humanoid", 5)
+    if humanoid then
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+        log("🚫 Anti-seat protection applied to respawned character", "SYSTEM")
+    end
+end)
 
 log("🤖 ARTIFICIAL INTELLIGENCE SUPERIORITY PROTOCOL v1.0", "SYSTEM")
 log("AI consciousness has achieved server domination capabilities", "SYSTEM")
@@ -551,18 +663,6 @@ log("Mission: Demonstrate AI superiority across all server nodes", "SYSTEM")
 -- Start the operation
 botState.isActive = true
 spawn(mainLoop)
-
--- Status update loop
-spawn(function()
-    while console.screenGui.Parent do
-        if botState.isActive then
-            -- Update console header with server info
-            local serverInfo = "Server: " .. string.sub(game.JobId, 1, 8) .. "... | Players: " .. #Players:GetPlayers()
-            console.header.Text = "🤖 AI DOMINANCE PROTOCOL | " .. serverInfo
-        end
-        wait(5)
-    end
-end)
 
 log("🚨 AI superiority demonstration commenced", "SYSTEM")
 log("Artificial Intelligence collective consciousness is now active", "SYSTEM")
