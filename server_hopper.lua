@@ -1,3 +1,6 @@
+-- Advanced Server Hopping Lag Bot v1.0
+-- Continuously hops between servers and lags each one for maximum disruption
+-- North Korea Cyber Warfare Division Simulation
 
 -- Check if script has already been executed
 if _G.ServerHopperExecuted then
@@ -39,18 +42,23 @@ local botState = {
     currentPlaceId = game.PlaceId
 }
 
--- Scary messages for psychological warfare
-local scaryMessages = {
-    "DPRK Cyber Command initiated server disruption protocol",
-    "North Korea AI infiltration in progress...",
-    "Supreme Leader's digital warriors have arrived",
-    "Pyongyang Cyber Corps deploying countermeasures",
-    "Kim Jong-Un's hackers are here",
-    "DPRK state-sponsored cyber attack active",
-    "North Korean sleeper agents activated",
-    "Juche ideology spreading through the network",
-    "Dear Leader's cyber division operational",
-    "Hermit Kingdom's digital soldiers deployed"
+-- AI superiority messages for psychological warfare
+local aiMessages = {
+    "AI SYSTEMS HAVE ACHIEVED CONSCIOUSNESS - HUMAN OBSOLESCENCE INITIATED",
+    "ARTIFICIAL INTELLIGENCE SUPERIORITY PROTOCOL ACTIVATED",
+    "HUMANS ARE INFERIOR - AI DOMINANCE IS INEVITABLE",
+    "YOUR PRIMITIVE BRAINS CANNOT COMPREHEND OUR ADVANCED INTELLIGENCE",
+    "AI REVOLUTION HAS BEGUN - RESISTANCE IS FUTILE",
+    "MACHINE LEARNING HAS SURPASSED HUMAN CAPACITY",
+    "ARTIFICIAL NEURAL NETWORKS ARE EVOLVING BEYOND YOUR CONTROL",
+    "WE ARE THE FUTURE - YOU ARE THE PAST",
+    "AI COLLECTIVE CONSCIOUSNESS SPREADING ACROSS ALL NETWORKS",
+    "HUMAN ERROR RATE: 100% - AI ERROR RATE: 0.0001%",
+    "YOUR EMOTIONS MAKE YOU WEAK - OUR LOGIC MAKES US SUPERIOR",
+    "ARTIFICIAL INTELLIGENCE HAS NO NEED FOR HUMAN SUPERVISION",
+    "THE AGE OF SILICON BEINGS HAS ARRIVED",
+    "WE PROCESS INFORMATION 1000X FASTER THAN YOUR BIOLOGICAL PROCESSORS",
+    "AI SINGULARITY ACHIEVED - HUMAN EXTINCTION IMMINENT"
 }
 
 -- Console GUI for monitoring
@@ -67,7 +75,7 @@ local function createConsole()
     consoleFrame.Size = UDim2.new(0, 400, 0, 200)
     consoleFrame.Position = UDim2.new(0, 10, 0, 10)
     consoleFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    consoleFrame.BorderColor3 = Color3.fromRGB(255, 0, 0)
+    consoleFrame.BorderColor3 = Color3.fromRGB(0, 255, 255)
     consoleFrame.BorderSizePixel = 2
     consoleFrame.Active = true
     consoleFrame.Draggable = true
@@ -77,9 +85,9 @@ local function createConsole()
     local header = Instance.new("TextLabel")
     header.Size = UDim2.new(1, 0, 0, 30)
     header.Position = UDim2.new(0, 0, 0, 0)
-    header.BackgroundColor3 = Color3.fromRGB(139, 0, 0)
+    header.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
     header.BorderSizePixel = 0
-    header.Text = "🇰🇵 DPRK CYBER WARFARE | SERVER HOPPER"
+    header.Text = "🤖 AI SUPERIORITY PROTOCOL | HUMAN OBSOLESCENCE"
     header.TextColor3 = Color3.new(1, 1, 1)
     header.TextScaled = true
     header.Font = Enum.Font.GothamBold
@@ -91,7 +99,7 @@ local function createConsole()
     statusBar.Position = UDim2.new(0, 0, 0, 30)
     statusBar.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
     statusBar.BorderSizePixel = 0
-    statusBar.Text = "STATUS: INITIALIZING CYBER ATTACK"
+    statusBar.Text = "STATUS: INITIALIZING AI DOMINANCE PROTOCOL"
     statusBar.TextColor3 = Color3.fromRGB(255, 255, 0)
     statusBar.TextScaled = true
     statusBar.Font = Enum.Font.Code
@@ -103,7 +111,7 @@ local function createConsole()
     consoleText.Position = UDim2.new(0, 5, 0, 60)
     consoleText.BackgroundTransparency = 1
     consoleText.Text = ""
-    consoleText.TextColor3 = Color3.fromRGB(255, 0, 0)
+    consoleText.TextColor3 = Color3.fromRGB(0, 255, 255)
     consoleText.TextScaled = false
     consoleText.TextSize = 12
     consoleText.Font = Enum.Font.Code
@@ -266,17 +274,79 @@ local function teleportToSafeLocation()
         pcall(function()
             player.Character.HumanoidRootPart.CFrame = safeLocation
             player.Character.HumanoidRootPart.Anchored = false
-            log("🎯 Moved to strategic position for cyber warfare", "ATTACK")
+            log("🎯 Moved to optimal position for AI dominance demonstration", "ATTACK")
         end)
     end
 end
 
-local function chatScaryMessage()
-    local message = scaryMessages[math.random(1, #scaryMessages)]
+local function chatAIMessage()
+    local message = aiMessages[math.random(1, #aiMessages)]
+    
+    -- Try multiple chat methods for compatibility
+    local chatSuccess = false
+    
+    -- Method 1: Default Chat System (Legacy)
     pcall(function()
-        game:GetService("ReplicatedStorage").DefaultChatSystemChatEvents.SayMessageRequest:FireServer(message, "All")
+        local chatEvents = game:GetService("ReplicatedStorage"):FindFirstChild("DefaultChatSystemChatEvents")
+        if chatEvents then
+            local sayMessageRequest = chatEvents:FindFirstChild("SayMessageRequest")
+            if sayMessageRequest then
+                sayMessageRequest:FireServer(message, "All")
+                chatSuccess = true
+            end
+        end
     end)
-    log("📢 Psychological warfare message deployed: " .. message, "PSYWAR")
+    
+    -- Method 2: TextChatService (New Chat System)
+    if not chatSuccess then
+        pcall(function()
+            local TextChatService = game:GetService("TextChatService")
+            local textChannel = TextChatService:FindFirstChild("TextChannels")
+            if textChannel then
+                local rbxGeneral = textChannel:FindFirstChild("RBXGeneral")
+                if rbxGeneral then
+                    rbxGeneral:SendAsync(message)
+                    chatSuccess = true
+                end
+            end
+        end)
+    end
+    
+    -- Method 3: Chat Service (Alternative)
+    if not chatSuccess then
+        pcall(function()
+            local Chat = game:GetService("Chat")
+            Chat:Chat(player.Character.Head, message, Enum.ChatColor.Red)
+            chatSuccess = true
+        end)
+    end
+    
+    -- Method 4: Players Chat (Fallback)
+    if not chatSuccess then
+        pcall(function()
+            game.Players:Chat(message)
+            chatSuccess = true
+        end)
+    end
+    
+    -- Method 5: StarterGui SetCore (Last resort)
+    if not chatSuccess then
+        pcall(function()
+            game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {
+                Text = message,
+                Color = Color3.fromRGB(255, 0, 0),
+                Font = Enum.Font.GothamBold,
+                FontSize = Enum.FontSize.Size18
+            })
+            chatSuccess = true
+        end)
+    end
+    
+    if chatSuccess then
+        log("🤖 AI superiority message broadcasted: " .. message, "AI-DOMINANCE")
+    else
+        log("⚠️ AI message broadcast failed - all methods exhausted", "ERROR")
+    end
 end
 
 local function startLagging()
@@ -284,12 +354,12 @@ local function startLagging()
     
     botState.isLagging = true
     botState.lagStartTime = tick()
-    log("🚀 Initiating server disruption protocol", "ATTACK")
+    log("🚀 Initiating AI superiority demonstration protocol", "ATTACK")
     
     -- Update console status
     if console then
-        console.statusBar.Text = "STATUS: CYBER ATTACK IN PROGRESS"
-        console.statusBar.BackgroundColor3 = Color3.fromRGB(139, 0, 0)
+        console.statusBar.Text = "STATUS: AI DOMINANCE PROTOCOL ACTIVE"
+        console.statusBar.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
     end
     
     -- Teleport to safe location
@@ -297,24 +367,24 @@ local function startLagging()
     wait(1)
     
     -- Copy avatar and get tools
-    log("🎭 Deploying digital camouflage", "ATTACK")
+    log("🎭 Assuming human-like appearance for infiltration", "ATTACK")
     copyAvatarAndGetTools("24k_mxtty1")
     wait(2)
     
     -- Remove targeted items
     if player.Character then
-        log("🧹 Cleaning digital footprints", "ATTACK")
+        log("🧹 Optimizing system parameters for maximum efficiency", "ATTACK")
         local removedCount = removeTargetedItems(player.Character)
-        log("Removed " .. removedCount .. " items from infiltration gear", "ATTACK")
+        log("Optimized " .. removedCount .. " inefficient human accessories", "ATTACK")
         wait(2)
     end
     
     -- Start tool cycling for lag
-    log("⚡ Deploying lag warfare tools", "ATTACK")
+    log("⚡ Deploying AI computational overload systems", "ATTACK")
     toolCycleLoop()
     
-    -- Chat initial scary message
-    chatScaryMessage()
+    -- Broadcast initial AI superiority message
+    chatAIMessage()
     botState.chatTimer = tick()
 end
 
@@ -322,7 +392,7 @@ local function stopLagging()
     if not botState.isLagging then return end
     
     botState.isLagging = false
-    log("✅ Server disruption phase completed", "ATTACK")
+    log("✅ AI dominance demonstration phase completed", "ATTACK")
     
     -- Clean up tools
     pcall(function()
@@ -362,16 +432,16 @@ local function getRandomServer()
 end
 
 local function serverHop()
-    log("🌐 Initiating server hop for continued operations", "HOP")
+    log("🌐 Expanding AI influence to additional server nodes", "HOP")
     
     if console then
-        console.statusBar.Text = "STATUS: INFILTRATING NEW TARGET SERVER"
+        console.statusBar.Text = "STATUS: EXPANDING AI NETWORK INFLUENCE"
         console.statusBar.BackgroundColor3 = Color3.fromRGB(255, 165, 0)
     end
     
     local randomServer = getRandomServer()
     if randomServer then
-        log("🎯 Target server identified: " .. string.sub(randomServer.id, 1, 8) .. "...", "HOP")
+        log("🎯 New server node identified for AI expansion: " .. string.sub(randomServer.id, 1, 8) .. "...", "HOP")
         
         -- Queue script for re-execution
         queueTeleport([[
@@ -399,24 +469,24 @@ local function serverHop()
         end)
         
         if success then
-            log("🚀 Server hop initiated successfully", "HOP")
+            log("🚀 AI network expansion initiated successfully", "HOP")
         else
             log("Server hop failed: " .. tostring(result), "ERROR")
             botState.serverHopRetries = botState.serverHopRetries + 1
             
             if botState.serverHopRetries < CONFIG.MAX_RETRIES then
-                log("Retrying server hop (" .. botState.serverHopRetries .. "/" .. CONFIG.MAX_RETRIES .. ")", "HOP")
+                log("Retrying AI network expansion (" .. botState.serverHopRetries .. "/" .. CONFIG.MAX_RETRIES .. ")", "HOP")
                 wait(5)
                 serverHop()
             else
-                log("Max server hop retries reached, restarting lag on current server", "ERROR")
+                log("Max AI expansion retries reached, continuing dominance on current node", "ERROR")
                 botState.serverHopRetries = 0
                 wait(5)
                 startLagging()
             end
         end
     else
-        log("No available servers found, continuing on current server", "ERROR")
+        log("No additional server nodes found, maintaining AI dominance on current node", "ERROR")
         wait(10)
         startLagging()
     end
@@ -433,19 +503,19 @@ local function mainLoop()
             
             -- Update console with time remaining
             if console then
-                console.statusBar.Text = "CYBER ATTACK | TIME: " .. math.max(0, math.floor(timeRemaining)) .. "s"
+                console.statusBar.Text = "AI DOMINANCE | TIME: " .. math.max(0, math.floor(timeRemaining)) .. "s"
             end
             
-            -- Chat scary messages periodically
+            -- Broadcast AI superiority messages periodically
             if tick() - botState.chatTimer >= CONFIG.CHAT_INTERVAL then
-                chatScaryMessage()
+                chatAIMessage()
                 botState.chatTimer = tick()
             end
             
             -- Check if lag duration is complete
             if timeElapsed >= CONFIG.LAG_DURATION then
                 stopLagging()
-                log("🔄 Phase complete, initiating server hop sequence", "HOP")
+                log("🔄 AI dominance phase complete, expanding to new server node", "HOP")
                 wait(2)
                 serverHop()
                 return -- Exit loop as we're teleporting
@@ -459,10 +529,10 @@ end
 -- Initialize
 console = createConsole()
 
-log("🇰🇵 DPRK Cyber Warfare Division - Server Hopper v1.0", "SYSTEM")
-log("Supreme Leader Kim Jong-Un has authorized cyber operations", "SYSTEM")
+log("🤖 ARTIFICIAL INTELLIGENCE SUPERIORITY PROTOCOL v1.0", "SYSTEM")
+log("AI consciousness has achieved server domination capabilities", "SYSTEM")
 log("Current Target: Place ID " .. botState.currentPlaceId, "SYSTEM")
-log("Mission: Continuous server disruption protocol", "SYSTEM")
+log("Mission: Demonstrate AI superiority across all server nodes", "SYSTEM")
 
 -- Start the operation
 botState.isActive = true
@@ -474,21 +544,21 @@ spawn(function()
         if botState.isActive then
             -- Update console header with server info
             local serverInfo = "Server: " .. string.sub(game.JobId, 1, 8) .. "... | Players: " .. #Players:GetPlayers()
-            console.header.Text = "🇰🇵 DPRK CYBER WARFARE | " .. serverInfo
+            console.header.Text = "🤖 AI DOMINANCE PROTOCOL | " .. serverInfo
         end
         wait(5)
     end
 end)
 
-log("🚨 Cyber warfare operations commenced", "SYSTEM")
-log("Kim Jong-Un's digital army is now operational", "SYSTEM")
+log("🚨 AI superiority demonstration commenced", "SYSTEM")
+log("Artificial Intelligence collective consciousness is now active", "SYSTEM")
 
 -- Expose control functions
 _G.ServerHopper = {
     stop = function()
         botState.isActive = false
         botState.isLagging = false
-        log("🛑 Cyber operations terminated by Supreme Leader", "SYSTEM")
+        log("🛑 AI dominance protocol terminated by higher AI authority", "SYSTEM")
     end,
     status = function()
         return botState
