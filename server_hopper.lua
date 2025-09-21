@@ -19,7 +19,7 @@ local TTS = ReplicatedStorage and ReplicatedStorage:FindFirstChild("TTS")
 
 -- Configuration
 local CONFIG = {
-    LAG_DURATION = 50, -- 50 seconds per server
+    LAG_DURATION = 30, -- 50 seconds per server
     SCRIPT_URL = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/server_hopper.lua", -- Update this to your script URL
     TOOL_CYCLE_DELAY = 0.01, -- Very fast tool cycling
     CHAT_INTERVAL = 8, -- Chat scary message every 15 seconds
@@ -519,76 +519,131 @@ local function getRandomServer()
     end
 end
 
+-- Timer function for robust retry delays
+local function startTimer(initialTime, onComplete)
+    local timeRemaining = initialTime
+    local connection
+    connection = RunService.Heartbeat:Connect(function()
+        timeRemaining = timeRemaining - RunService.Heartbeat:Wait()
+        if timeRemaining <= 0 then
+            connection:Disconnect()
+            if onComplete then
+                onComplete()
+            end
+        end
+    end)
+    return connection
+end
+
 local function serverHop()
     log("🌐 Expanding AI influence to additional server nodes", "HOP")
     
-    local attemptServerHop
-    attemptServerHop = function()
-        local randomServer = getRandomServer()
-        if randomServer then
-            log("🎯 New server node identified for AI expansion: " .. string.sub(randomServer.id, 1, 8) .. "... (Players: " .. (randomServer.playing or "?") .. "/" .. (randomServer.maxPlayers or "?") .. ")", "HOP")
-            
-            -- Queue script for re-execution
-            queueTeleport([[
-                -- Re-execute server hopper script
-                _G.ServerHopperExecuted = nil
-                wait(3)
-                local success, script = pcall(function()
-                    return game:HttpGet("]] .. CONFIG.SCRIPT_URL .. [[")
-                end)
-                if success and script and script ~= "" then
-                    local loadSuccess, err = pcall(function()
-                        loadstring(script)()
-                    end)
-                    if not loadSuccess then
-                        warn("Script execution failed: " .. tostring(err))
-                    end
-                else
-                    warn("Failed to download server hopper script")
-                end
-            ]])
-            
-            -- Teleport to new server
-            local success, result = pcall(function()
-                TeleportService:TeleportToPlaceInstance(botState.currentPlaceId, randomServer.id, player)
+    local function attemptHop()
+        local attempt = 1
+        local timerConnection
+        local baseDelay = 3
+        local originalJobId = game.JobId
+
+        while true do
+            log("🌐 Scanning server nodes (Attempt " .. attempt .. ")...", "HOP")
+            local servers = {}
+            local success, response = pcall(function()
+                return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
             end)
             
-            if success then
-                log("🚀 AI network expansion initiated successfully", "HOP")
+            if success and response and response.data then
+                for _, v in pairs(response.data) do
+                    if v.playing < v.maxPlayers and v.id ~= game.JobId then
+                        table.insert(servers, v.id)
+                    end
+                end
             else
-                local errorMsg = tostring(result):lower()
-                log("Server hop failed: " .. tostring(result), "ERROR")
-                
-                -- Check if it's a server full error or other issue
-                if errorMsg:find("full") or errorMsg:find("capacity") or errorMsg:find("maxplayers") then
-                    log("⚠️ Target server node at capacity - scanning for alternative nodes", "HOP")
-                else
-                    log("⚠️ Network connection issue detected - retrying AI expansion", "HOP")
-                end
-                
-                botState.serverHopRetries = botState.serverHopRetries + 1
-                
-                if botState.serverHopRetries < CONFIG.MAX_RETRIES then
-                    log("Retrying AI network expansion (" .. botState.serverHopRetries .. "/" .. CONFIG.MAX_RETRIES .. ") - Scanning new server nodes...", "HOP")
-                    wait(3) -- Shorter wait for retries
-                    attemptServerHop() -- Try again with a NEW random server
-                else
-                    log("Max AI expansion retries reached, continuing dominance on current node", "ERROR")
-                    botState.serverHopRetries = 0
-                    wait(5)
-                    startLagging()
-                end
+                log("❌ Failed to fetch server list. Retrying in " .. baseDelay * attempt .. "s...", "ERROR")
+                sendTTSMessage("Failed to fetch server list. Retrying in " .. baseDelay * attempt .. " seconds", "9")
+                if timerConnection then timerConnection:Disconnect() end
+                timerConnection = startTimer(baseDelay * attempt, function()
+                    attempt = attempt + 1
+                    attemptHop()
+                end)
+                return
             end
-        else
-            log("No additional server nodes found, maintaining AI dominance on current node", "ERROR")
-            wait(10)
-            startLagging()
+
+            if #servers > 0 then
+                local randomServer = servers[math.random(1, #servers)]
+                log("🎯 Attempting AI expansion to server " .. string.sub(randomServer, 1, 8) .. "...", "HOP")
+                sendTTSMessage("Attempting AI expansion to new server", "9")
+                
+                -- Queue script for re-execution
+                local queueSuccess, queueError = pcall(function()
+                    queueTeleport([[
+                        -- Re-execute server hopper script
+                        _G.ServerHopperExecuted = nil
+                        task.wait(5)
+                        local success, script = pcall(function()
+                            return game:HttpGet("]] .. CONFIG.SCRIPT_URL .. [[")
+                        end)
+                        if success and script and script ~= "" then
+                            local loadSuccess, err = pcall(function()
+                                loadstring(script)()
+                            end)
+                            if not loadSuccess then
+                                warn("Script execution failed: " .. tostring(err))
+                            end
+                        else
+                            warn("Failed to download server hopper script")
+                        end
+                    ]])
+                end)
+                if not queueSuccess then
+                    log("Queue teleport failed: " .. tostring(queueError), "WARNING")
+                end
+
+                local success, result = pcall(function()
+                    TeleportService:TeleportToPlaceInstance(game.PlaceId, randomServer, player)
+                end)
+                
+                if not success then
+                    log("❌ Teleport failed: " .. tostring(result) .. ". Retrying in " .. baseDelay * attempt .. "s...", "ERROR")
+                    sendTTSMessage("Teleport failed. Retrying in " .. baseDelay * attempt .. " seconds", "9")
+                    if timerConnection then timerConnection:Disconnect() end
+                    timerConnection = startTimer(baseDelay * attempt, function()
+                        attempt = attempt + 1
+                        attemptHop()
+                    end)
+                    return
+                else
+                    -- Wait to check if teleport was successful
+                    task.wait(3)
+                    if game.JobId == originalJobId then
+                        log("❌ Server full or failed to join. Retrying in " .. baseDelay * attempt .. "s...", "ERROR")
+                        sendTTSMessage("Server full or failed to join. Retrying in " .. baseDelay * attempt .. " seconds", "9")
+                        if timerConnection then timerConnection:Disconnect() end
+                        timerConnection = startTimer(baseDelay * attempt, function()
+                            attempt = attempt + 1
+                            attemptHop()
+                        end)
+                        return
+                    else
+                        log("✅ Successfully expanded AI network to new server!", "HOP")
+                        sendTTSMessage("Successfully expanded AI network to new server!", "9")
+                        if timerConnection then timerConnection:Disconnect() end
+                        break
+                    end
+                end
+            else
+                log("❌ No available servers. Retrying in " .. baseDelay * attempt .. "s...", "ERROR")
+                sendTTSMessage("No available servers. Retrying in " .. baseDelay * attempt .. " seconds", "9")
+                if timerConnection then timerConnection:Disconnect() end
+                timerConnection = startTimer(baseDelay * attempt, function()
+                    attempt = attempt + 1
+                    attemptHop()
+                end)
+                return
+            end
         end
     end
-    
-    -- Reset retry counter for new hop attempt
-    botState.serverHopRetries = 0
-    attemptServerHop()
+
+    attemptHop()
 end
 
 -- Main loop
