@@ -8,14 +8,30 @@ if _G.StresserBotExecuted then
 end
 _G.StresserBotExecuted = true
 
-local TeleportService = game:GetService("TeleportService")
-local HttpService = game:GetService("HttpService")
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Workspace = game:GetService("Workspace")
+-- Executor compatibility and service protection
+local rawgs = clonefunction and clonefunction(game.GetService) or game.GetService
+local function gs(service)
+    local ok, result = pcall(rawgs, game, service)
+    return ok and result or nil
+end
 
--- TTS service
+local function define(instance)
+    if cloneref then
+        local ok, protected = pcall(cloneref, instance)
+        if ok and protected then return protected end
+    end
+    return instance
+end
+
+-- Services
+local ReplicatedStorage = define(gs("ReplicatedStorage"))
+local Players = define(gs("Players"))
+local Workspace = define(gs("Workspace"))
+local RunService = define(gs("RunService"))
+local HttpService = define(gs("HttpService"))
+local TeleportService = define(gs("TeleportService"))
+local TextChatService = define(gs("TextChatService"))
+
 local TTS = ReplicatedStorage and ReplicatedStorage:FindFirstChild("TTS")
 
 -- Configuration
@@ -27,11 +43,88 @@ local CONFIG = {
     AUTO_START = true,
     SCRIPT_URL = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/bot.lua",
     TOOL_CYCLE_DELAY = 0.05,  -- Very fast tool cycling for lag (NO TTS, NO TELEPORTING)
-    TELEPORT_DELAY = 0.2,    -- Slower delay between teleports in annoy mode (was 0.05)
+    TELEPORT_DELAY = 0.3,    -- Slower delay between teleports in annoy mode (was 0.05)
     TTS_INTERVAL = 8         -- Send TTS every 8 seconds in annoy mode
 }
 
-local player = Players.LocalPlayer
+local player = define(Players.LocalPlayer)
+
+-- Proximity prompt setup (like example.lua)
+local function findProximityPrompt()
+    local prompt
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("ProximityPrompt") then
+            prompt = obj
+            break
+        end
+    end
+    return prompt
+end
+
+-- Player character setup (like example.lua)
+local character
+local humanoidRootPart
+local humanoid
+
+local function setupCharacter()
+    local maxAttempts = 10
+    local attempt = 1
+    
+    while not character and attempt <= maxAttempts do
+        character = player.Character
+        if not character then
+            local success, result = pcall(function()
+                return player.CharacterAdded:Wait()
+            end)
+            if success and result then
+                character = result
+            else
+                log("Failed to get character on attempt " .. attempt .. ": " .. tostring(result), "ERROR")
+                task.wait(1)
+            end
+        end
+        attempt = attempt + 1
+    end
+
+    if not character then
+        log("Failed to load player character after " .. maxAttempts .. " attempts", "ERROR")
+        return false
+    end
+
+    humanoidRootPart = character:WaitForChild("HumanoidRootPart", 5)
+    humanoid = character:WaitForChild("Humanoid", 5)
+
+    if not humanoidRootPart or not humanoid then
+        log("Failed to find HumanoidRootPart or Humanoid in character", "ERROR")
+        return false
+    end
+    
+    -- Disable seats
+    humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+    
+    return true
+end
+
+-- Handle character respawn (like example.lua)
+player.CharacterAdded:Connect(function(newChar)
+    character = newChar
+    humanoidRootPart = newChar:WaitForChild("HumanoidRootPart", 5)
+    humanoid = newChar:WaitForChild("Humanoid", 5)
+    
+    if not humanoidRootPart or not humanoid then
+        log("Failed to find HumanoidRootPart or Humanoid in new character", "ERROR")
+        return
+    end
+    
+    -- Disable seats
+    humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+    
+    -- If we're in annoy mode when respawning, continue
+    if botState.isAnnoying then
+        log("Character respawned during annoy mode, continuing annoy protocol", "ANNOY")
+        enableNoclip() -- Re-enable noclip
+    end
+end)
 
 -- Setup queue teleport compatibility across executors
 local queueTeleport = (syn and syn.queue_on_teleport) or
@@ -520,7 +613,31 @@ local function sendTTSMessage(message, voice)
     end
 end
 
--- Teleport loop for annoy mode (like example.lua)
+-- Noclip function to prevent collisions (from example.lua)
+local function enableNoclip()
+    spawn(function()
+        while botState.isAnnoying do
+            if player.Character then
+                for _, part in ipairs(player.Character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                    end
+                end
+            end
+            task.wait()
+        end
+        -- Re-enable collisions when annoy mode ends
+        if player.Character then
+            for _, part in ipairs(player.Character:GetDescendants()) do
+                if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                    part.CanCollide = true
+                end
+            end
+        end
+    end)
+end
+
+-- Teleport loop for annoy mode (exactly like example.lua)
 local function startAnnoyTeleportLoop()
     if botState.isOmnipresent then return end
     botState.isOmnipresent = true
@@ -528,20 +645,21 @@ local function startAnnoyTeleportLoop()
     log("🌀 Starting annoy teleport loop - cycling through all players", "ANNOY")
     
     spawn(function()
+        -- Enable noclip first
+        enableNoclip()
+        
         while botState.isAnnoying and botState.isOmnipresent do
-            local allPlayers = Players:GetPlayers()
-            for _, targetPlayer in ipairs(allPlayers) do
+            local players = Players:GetPlayers()
+            for _, other in ipairs(players) do
                 if not botState.isAnnoying then break end
                 
-                if targetPlayer ~= player and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                if other ~= player and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
                     if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
                         pcall(function()
-                            -- Teleport near the target player (like example.lua)
-                            local targetPos = targetPlayer.Character.HumanoidRootPart.Position
-                            local offset = Vector3.new(2, 0, 0) -- Same offset as example.lua
-                            player.Character.HumanoidRootPart.CFrame = CFrame.new(targetPos + offset)
+                            -- Exact same teleportation as example.lua
+                            player.Character.HumanoidRootPart.CFrame = CFrame.new(other.Character.HumanoidRootPart.Position + Vector3.new(2, 0, 0))
                         end)
-                        wait(CONFIG.TELEPORT_DELAY) -- Use the same delay as example.lua
+                        task.wait(CONFIG.TELEPORT_DELAY)
                     end
                 end
             end
@@ -580,11 +698,28 @@ local function startAnnoyServer()
     botState.lastLoggedTime = 0 -- Reset timing logs
     log("Starting annoy server for " .. botState.currentDuration .. " seconds", "ANNOY")
     
+    -- Handle proximity prompt first (like example.lua)
+    local proximityPrompt = findProximityPrompt()
+    if proximityPrompt and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        log("Found proximity prompt, interacting with it first", "ANNOY")
+        pcall(function()
+            local promptPos = proximityPrompt.Parent.Position
+            player.Character.HumanoidRootPart.CFrame = CFrame.new(promptPos + Vector3.new(2, 0, 0))
+            task.wait(0.5)
+            proximityPrompt:InputHoldBegin()
+            task.wait(0.1)
+            proximityPrompt:InputHoldEnd()
+            log("Proximity prompt activated successfully", "ANNOY")
+        end)
+    else
+        log("No proximity prompt found, proceeding with annoy mode", "ANNOY")
+    end
+    
     -- Start teleport loop (like example.lua - no avatar copying or tools for annoy mode)
     startAnnoyTeleportLoop()
     
     -- Send initial TTS message
-    sendTTSMessage("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "9")
+    sendTTSMessage("yyyyyyyyyyyyyyyyyyyyyyyyy", "9")
     botState.chatTimer = tick()
     
     log("Annoy server protocol activated - teleporting to everyone and spamming TTS!", "ANNOY")
@@ -861,7 +996,7 @@ local function checkLagDuration()
         
         -- Send TTS message every 8 seconds (CONFIG.TTS_INTERVAL)
         if tick() - botState.chatTimer >= CONFIG.TTS_INTERVAL then
-            sendTTSMessage("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "9")
+            sendTTSMessage("yyyyyyyyyyyyyyyyyyyyyyyyy", "9")
             botState.chatTimer = tick()
         end
         
@@ -1053,6 +1188,12 @@ log("Bot ID: " .. CONFIG.BOT_ID)
 
 -- Check if we're in a target server first
 local inTargetServer = checkIfInTargetServer()
+
+-- Initialize character setup
+log("Setting up character...", "SYSTEM")
+if not setupCharacter() then
+    log("Character setup failed, but continuing with bot initialization", "WARNING")
+end
 
 -- Test connection and auto-start
 spawn(function()
