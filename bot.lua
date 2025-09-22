@@ -101,8 +101,8 @@ local CONFIG = {
     AUTO_START = true,
     SCRIPT_URL = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/bot.lua",
     TOOL_CYCLE_DELAY = 0.05,  -- Very fast tool cycling for lag (NO TTS, NO TELEPORTING)
-    TELEPORT_DELAY = 0.1,    -- Slower delay between teleports in annoy mode (was 0.05)
-    TTS_INTERVAL = 15         -- Send TTS every 8 seconds in annoy mode
+    TELEPORT_DELAY = 0.3,    -- Slower delay between teleports in annoy mode (was 0.05)
+    TTS_INTERVAL = 8         -- Send TTS every 8 seconds in annoy mode
 }
 
 local player = define(Players.LocalPlayer)
@@ -836,22 +836,16 @@ local function startAnnoyServer()
     botState.lastLoggedTime = 0 -- Reset timing logs
     log("Starting annoy server for " .. botState.currentDuration .. " seconds", "ANNOY")
     
-    -- Handle proximity prompt first (like example.lua)
-    local proximityPrompt = findProximityPrompt()
-    if proximityPrompt and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-        log("Found proximity prompt, interacting with it first", "ANNOY")
-        pcall(function()
-            local promptPos = proximityPrompt.Parent.Position
-            player.Character.HumanoidRootPart.CFrame = CFrame.new(promptPos + Vector3.new(2, 0, 0))
-            task.wait(0.5)
-            proximityPrompt:InputHoldBegin()
-            task.wait(0.1)
-            proximityPrompt:InputHoldEnd()
-            log("Proximity prompt activated successfully", "ANNOY")
-        end)
-    else
-        log("No proximity prompt found, proceeding with annoy mode", "ANNOY")
-    end
+    -- Fire RoomExtra remote first (from Sigma Spy)
+    pcall(function()
+        local RoomExtra = ReplicatedStorage and ReplicatedStorage:FindFirstChild("RoomExtra")
+        if RoomExtra then
+            RoomExtra:FireServer()
+            log("RoomExtra remote fired successfully", "ANNOY")
+        else
+            log("RoomExtra remote not found", "WARNING")
+        end
+    end)
     
     -- Start teleport loop (like example.lua - no avatar copying or tools for annoy mode)
     startAnnoyTeleportLoop()
