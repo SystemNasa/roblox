@@ -217,7 +217,8 @@ local botState = {
     omnipresenceConnection = nil,
     lastLoggedTime = 0,
     annoyMode = "server", -- "server" or "player"
-    targetPlayer = nil
+    targetPlayer = nil,
+    roomExtraActivated = false -- Track if RoomExtra has been activated this session
 }
 
 -- File handling functions for executor compatibility
@@ -689,6 +690,52 @@ local mysteriousMessages = {
 -- Different voice options for variety
 local voiceOptions = {"9", "8", "7", "6", "5", "4", "3", "2", "1"}
 
+-- Random teleport positions around target (front, behind, left, right, etc.)
+local function getRandomTeleportOffset()
+    local offsets = {
+        Vector3.new(3, 0, 0),   -- Right
+        Vector3.new(-3, 0, 0),  -- Left
+        Vector3.new(0, 0, 3),   -- Front
+        Vector3.new(0, 0, -3),  -- Behind
+        Vector3.new(2, 0, 2),   -- Front-right
+        Vector3.new(-2, 0, 2),  -- Front-left
+        Vector3.new(2, 0, -2),  -- Behind-right
+        Vector3.new(-2, 0, -2), -- Behind-left
+        Vector3.new(0, 2, 1),   -- Above-front
+        Vector3.new(1, -1, 0)   -- Below-right
+    }
+    return offsets[math.random(1, #offsets)]
+end
+
+-- Play annoy animation
+local function playAnnoyAnimation()
+    pcall(function()
+        if player.Character and player.Character:FindFirstChild("Humanoid") then
+            local humanoid = player.Character.Humanoid
+            local animationId = "rbxassetid://83375399295408"
+            
+            -- Create animation object
+            local animation = Instance.new("Animation")
+            animation.AnimationId = animationId
+            
+            -- Load and play animation
+            local animTrack = humanoid:LoadAnimation(animation)
+            if animTrack then
+                animTrack:Play()
+                log("Playing annoy animation", "ANNOY")
+                
+                -- Stop animation after a short time to avoid it getting stuck
+                spawn(function()
+                    task.wait(2)
+                    if animTrack then
+                        animTrack:Stop()
+                    end
+                end)
+            end
+        end
+    end)
+end
+
 -- TTS function for annoy server with mysterious AI messages
 local function sendTTSMessage(message, voice)
     pcall(function()
@@ -770,11 +817,15 @@ local function startAnnoyTeleportLoop()
                 if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
                     if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
                         pcall(function()
-                            -- ONLY teleport to the specific target player
-                            player.Character.HumanoidRootPart.CFrame = CFrame.new(targetPlayer.Character.HumanoidRootPart.Position + Vector3.new(2, 0, 0))
+                            -- Use random teleport position around the target player
+                            local randomOffset = getRandomTeleportOffset()
+                            player.Character.HumanoidRootPart.CFrame = CFrame.new(targetPlayer.Character.HumanoidRootPart.Position + randomOffset)
+                            
+                            -- Play annoy animation
+                            playAnnoyAnimation()
                         end)
                     end
-                    log("Teleporting to target: " .. botState.targetPlayer, "ANNOY")
+                    log("Teleporting to target: " .. botState.targetPlayer .. " with random position", "ANNOY")
                 else
                     log("Target player '" .. botState.targetPlayer .. "' not found or has no character", "WARNING")
                 end
@@ -793,8 +844,12 @@ local function startAnnoyTeleportLoop()
                     if other ~= player and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
                         if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
                             pcall(function()
-                                -- Teleport to all players in server mode
-                                player.Character.HumanoidRootPart.CFrame = CFrame.new(other.Character.HumanoidRootPart.Position + Vector3.new(2, 0, 0))
+                                -- Use random teleport position around each player
+                                local randomOffset = getRandomTeleportOffset()
+                                player.Character.HumanoidRootPart.CFrame = CFrame.new(other.Character.HumanoidRootPart.Position + randomOffset)
+                                
+                                -- Play annoy animation
+                                playAnnoyAnimation()
                             end)
                             task.wait(CONFIG.TELEPORT_DELAY)
                         end
@@ -836,38 +891,51 @@ local function startAnnoyServer()
     botState.lastLoggedTime = 0 -- Reset timing logs
     log("Starting annoy server for " .. botState.currentDuration .. " seconds", "ANNOY")
     
-    -- Activate RoomExtra proximity prompt first
-    pcall(function()
-        local roomExtraPrompt = workspace.Map and workspace.Map:FindFirstChild("RoomExtra") and 
-                               workspace.Map.RoomExtra:FindFirstChild("Model") and 
-                               workspace.Map.RoomExtra.Model:FindFirstChild("Activate") and 
-                               workspace.Map.RoomExtra.Model.Activate:FindFirstChild("ProximityPrompt")
-        
-        if roomExtraPrompt and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            log("Found RoomExtra proximity prompt, activating it", "ANNOY")
-            
-            -- Teleport to the proximity prompt location
-            local promptParent = roomExtraPrompt.Parent
-            if promptParent and promptParent:FindFirstChild("Position") then
-                player.Character.HumanoidRootPart.CFrame = CFrame.new(promptParent.Position + Vector3.new(2, 0, 0))
-            elseif promptParent.PrimaryPart then
-                player.Character.HumanoidRootPart.CFrame = CFrame.new(promptParent.PrimaryPart.Position + Vector3.new(2, 0, 0))
-            elseif promptParent:IsA("BasePart") then
-                player.Character.HumanoidRootPart.CFrame = CFrame.new(promptParent.Position + Vector3.new(2, 0, 0))
+    -- Activate RoomExtra proximity prompt first (only once per session)
+    if not botState.roomExtraActivated then
+        pcall(function()
+            if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                log("Teleporting to RoomExtra proximity prompt location (first time this session)", "ANNOY")
+                
+                -- Teleport to the specific coordinates (position only, no rotation)
+                local promptPosition = Vector3.new(368.001526, 17.25, 156.249634)
+                player.Character.HumanoidRootPart.CFrame = CFrame.new(promptPosition)
+                
+                task.wait(0.2)
+                
+                -- Find and trigger the proximity prompt
+                local roomExtraPrompt = workspace.Map and workspace.Map:FindFirstChild("RoomExtra") and 
+                                       workspace.Map.RoomExtra:FindFirstChild("Model") and 
+                                       workspace.Map.RoomExtra.Model:FindFirstChild("Activate") and 
+                                       workspace.Map.RoomExtra.Model.Activate:FindFirstChild("ProximityPrompt")
+                
+                if roomExtraPrompt then
+                    log("Found RoomExtra proximity prompt, activating it", "ANNOY")
+                    roomExtraPrompt:InputHoldBegin()
+                    task.wait(0.1)
+                    roomExtraPrompt:InputHoldEnd()
+                    log("RoomExtra proximity prompt activated successfully", "ANNOY")
+                    
+                    -- Mark as activated so it won't happen again
+                    botState.roomExtraActivated = true
+                    
+                    -- Wait briefly for the prompt action to complete
+                    log("Waiting 1 second for RoomExtra action to complete...", "ANNOY")
+                    task.wait(1)
+                else
+                    log("RoomExtra proximity prompt not found at workspace.Map.RoomExtra.Model.Activate.ProximityPrompt", "WARNING")
+                end
+            else
+                log("Player character or HumanoidRootPart not found", "ERROR")
             end
-            
-            task.wait(0.5)
-            
-            -- Trigger the proximity prompt
-            roomExtraPrompt:InputHoldBegin()
-            task.wait(0.1)
-            roomExtraPrompt:InputHoldEnd()
-            
-            log("RoomExtra proximity prompt activated successfully", "ANNOY")
-        else
-            log("RoomExtra proximity prompt not found at workspace.Map.RoomExtra.Model.Activate.ProximityPrompt", "WARNING")
-        end
-    end)
+        end)
+        
+        -- Brief wait before starting teleport loop
+        log("RoomExtra sequence complete, starting annoy teleport loop in 0.5 seconds...", "ANNOY")
+        task.wait(0.5)
+    else
+        log("RoomExtra already activated this session, skipping and starting annoy immediately", "ANNOY")
+    end
     
     -- Start teleport loop (like example.lua - no avatar copying or tools for annoy mode)
     startAnnoyTeleportLoop()
