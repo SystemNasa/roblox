@@ -742,8 +742,10 @@ local function startAnnoyTeleportLoop()
     
     if botState.annoyMode == "player" and botState.targetPlayer then
         log("🎯 Starting specific player annoy - targeting: " .. botState.targetPlayer, "ANNOY")
+        log("[TELEPORT DEBUG] MODE: player | TARGET: " .. botState.targetPlayer, "DEBUG")
     else
         log("🌀 Starting annoy teleport loop - cycling through all players", "ANNOY")
+        log("[TELEPORT DEBUG] MODE: " .. (botState.annoyMode or "nil") .. " | TARGET: " .. (botState.targetPlayer or "nil"), "DEBUG")
     end
     
     spawn(function()
@@ -751,8 +753,12 @@ local function startAnnoyTeleportLoop()
         enableNoclip()
         
         while botState.isAnnoying and botState.isOmnipresent do
+            -- Critical debug: check what mode we're in each loop iteration
+            log("[LOOP DEBUG] annoyMode=" .. (botState.annoyMode or "nil") .. " targetPlayer=" .. (botState.targetPlayer or "nil"), "DEBUG")
+            
             if botState.annoyMode == "player" and botState.targetPlayer then
                 -- Target specific player mode - ONLY TELEPORT TO THIS PLAYER
+                log("[DECISION] Entering PLAYER-SPECIFIC mode for: " .. botState.targetPlayer, "DEBUG")
                 local targetPlayer = nil
                 for _, p in ipairs(Players:GetPlayers()) do
                     if p.Name == botState.targetPlayer and p ~= player then
@@ -779,6 +785,7 @@ local function startAnnoyTeleportLoop()
                 
             else
                 -- Whole server mode (original behavior) - teleport to everyone
+                log("[DECISION] Entering SERVER-WIDE mode - teleporting to ALL players", "DEBUG")
                 local players = Players:GetPlayers()
                 for _, other in ipairs(players) do
                     if not botState.isAnnoying then break end
@@ -1034,6 +1041,7 @@ local function checkCurrentServer(target)
         -- Debug logging for targeting
         if botState.currentTaskType == "annoy" then
             log("🎯 ANNOY MODE: " .. botState.annoyMode .. " | TARGET: " .. (botState.targetPlayer or "ALL PLAYERS"), "DEBUG")
+            log("[CRITICAL DEBUG] Bot will teleport to: " .. (botState.annoyMode == "player" and botState.targetPlayer or "EVERYONE"), "DEBUG")
         end
         
         if botState.currentTaskType == "annoy" then
@@ -1071,6 +1079,7 @@ local function executeAttack(target)
     -- Debug logging for targeting
     if botState.currentTaskType == "annoy" then
         log("🎯 ANNOY MODE: " .. botState.annoyMode .. " | TARGET: " .. (botState.targetPlayer or "ALL PLAYERS"), "DEBUG")
+        log("[CRITICAL DEBUG] Bot will teleport to: " .. (botState.annoyMode == "player" and botState.targetPlayer or "EVERYONE"), "DEBUG")
     end
     
     local taskName = botState.currentTaskType == "annoy" and "Annoy Server" or "Attack"
