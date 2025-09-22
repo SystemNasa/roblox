@@ -749,7 +749,7 @@ local function playAnnoyAnimation()
     end)
 end
 
--- Get synchronized message (sequential order) and random voice
+-- Get synchronized message (sequential order) and synchronized voice
 local function getSyncedMessageAndVoice()
     -- Use os.time() for time windows but only for message progression
     local currentTime = os.time()
@@ -758,8 +758,8 @@ local function getSyncedMessageAndVoice()
     -- Calculate message index sequentially (cycles through 1, 2, 3... then back to 1)
     local messageIndex = (timeWindow % #mysteriousMessages) + 1
     
-    -- Keep voice random and not synced
-    local voiceIndex = math.random(1, #voiceOptions)
+    -- Synchronize voice too - use same time window but different calculation
+    local voiceIndex = ((timeWindow * 3) % #voiceOptions) + 1
     
     local message = mysteriousMessages[messageIndex]
     local voice = voiceOptions[voiceIndex]
