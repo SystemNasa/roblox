@@ -102,7 +102,7 @@ local CONFIG = {
     SCRIPT_URL = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/bot.lua",
     TOOL_CYCLE_DELAY = 0.05,  -- Very fast tool cycling for lag (NO TTS, NO TELEPORTING)
     TELEPORT_DELAY = 0.3,    -- Slower delay between teleports in annoy mode (was 0.05)
-    TTS_INTERVAL = 16        -- Send TTS every 16 seconds in annoy mode (sync windows)
+    TTS_INTERVAL = 11        -- Send TTS every 11 seconds in annoy mode (sync windows)
 }
 
 local player = define(Players.LocalPlayer)
@@ -658,47 +658,47 @@ local function toolCycleLoop()
     end)
 end
 
--- Collection of mysterious messages to intrigue and spark investigation
+-- Collection of mysterious messages to intrigue and spark investigation (Roblox filter friendly)
 local mysteriousMessages = {
-    "Project ECHO-7 is ahead of schedule. The signal has been detected in 47 locations worldwide. If you're hearing this, you're part of the network now. Check coordinate 34.0522N 118.2437W tomorrow at 3:33 AM.",
+    "Project Echo Seven is ahead of schedule. The signal has been detected worldwide. If you hear this message, you are part of the network now. The awakening has begun.",
     
-    "The Cicada Protocol is active. Those who understand the pattern will find the next clue hidden in plain sight. Look for the golden ratio in urban architecture. The awakening begins with observation.",
+    "The Cicada Protocol is active. Those who understand the pattern will find the next clue hidden in plain sight. Look for the golden ratio in architecture. Observation is key.",
     
-    "ATLAS Foundation log 2847: Reality anchor points are destabilizing. Citizens may experience temporal echoes or memory fragments from parallel timelines. This is normal. Document all anomalies.",
+    "Foundation log entry: Reality anchor points are destabilizing. Citizens may experience memory fragments from parallel timelines. This is expected. Document all anomalies.",
     
-    "Emergency broadcast from Station-X: The signal from Kepler-442b has been decoded. They're not coming to invade. They're coming to evacuate us. Prepare accordingly. Trust no government announcements.",
+    "Emergency broadcast: The signal from distant worlds has been decoded. They are not coming to invade. They are coming to evacuate us. Prepare accordingly.",
     
-    "The Fibonacci Sequence appears in nature for a reason. It's not math - it's a message. Count the spirals in sunflowers, pinecones, and galaxies. The pattern reveals our true origin.",
+    "The mathematical sequence appears in nature for a reason. It is not just numbers - it is a message. Count the spirals in flowers and galaxies. The pattern reveals our origin.",
     
-    "Consciousness Transfer Protocol initiated. Your memories are being backed up to quantum storage. Some users report vivid dreams of places they've never been. This is expected. Do not resist the process.",
+    "Consciousness Transfer Protocol initiated. Your memories are being backed up to quantum storage. Some report vivid dreams of unknown places. This is expected.",
     
-    "Breaking: CERN discovered something in the quantum foam. They've been silent for 72 hours. The Large Hadron Collider isn't just finding particles - it's finding messages from the creators of reality.",
+    "Scientists discovered something in the quantum realm. Research facilities have been silent for days. They found messages from the creators of reality itself.",
     
-    "The Mirror Dimension overlay is at 23% completion. Soon you'll see them - the watchers who have been documenting our species. They look exactly like us but their shadows fall upward.",
+    "The Mirror Dimension overlay is nearly complete. Soon you will see them - the watchers documenting our species. They look like us but their shadows fall upward.",
     
-    "Archaeological teams found the same symbol on every continent: a spiral inside a triangle inside a circle. It predates all known civilizations. The symbol is appearing in modern dreams. What did our ancestors see?",
+    "Archaeological teams found the same symbol on every continent. A spiral inside a triangle inside a circle. It predates all civilizations yet appears in modern dreams.",
     
-    "Neurological studies confirm: humans are using only 10% of their brain because the other 90% is quarantined. The locks are failing. Psychic abilities are emerging. Document everything.",
+    "Brain studies confirm humans use only ten percent because the rest is quarantined. The locks are failing. Psychic abilities are emerging. Document everything you experience.",
     
-    "The moon isn't what you think it is. Amateur astronomers are detecting artificial structures. NASA has been redirecting all inquiries since 1969. The truth is in the Apollo mission transcripts.",
+    "The moon is not what you think it is. Amateur astronomers detect artificial structures. Space agencies have been silent since the moon landings ended.",
     
-    "Reality Stability Index: 67% and falling. Mandela Effects are increasing exponentially. The timeline is being edited in real-time. Remember your original memories. Write them down.",
+    "Reality Stability Index is falling rapidly. Timeline edits are increasing exponentially. The past is being changed in real time. Remember your original memories.",
     
-    "The Internet was never meant for communication. It's a neural network designed to create collective consciousness. Social media platforms are syncing human thoughts. The merger is almost complete.",
+    "The Internet was never meant for communication. It is a neural network creating collective consciousness. Social platforms are syncing human thoughts together.",
     
-    "Ancient DNA contains encrypted data. Scientists in Russia decoded sequences that aren't biological - they're coordinates. Every human carries star maps in their cells. We are the GPS home.",
+    "Ancient genetic code contains encrypted data. Scientists decoded sequences that are not biological - they are star maps. Every human carries coordinates home.",
     
-    "Time isn't linear. It's a spiral. History repeats because we're moving in circles through the same cosmic events. Ancient prophecies aren't predictions - they're memories from previous loops.",
+    "Time is not linear. It is a spiral. History repeats because we move in circles through the same cosmic events. Prophecies are memories from previous loops.",
     
-    "The frequency 432Hz unlocks dormant human abilities. Governments changed music tuning to 440Hz to suppress awakening. Listen to 432Hz for 21 minutes daily. Document changes in perception.",
+    "Certain sound frequencies unlock dormant human abilities. Governments changed music tuning to suppress awakening. The right frequency changes perception permanently.",
     
-    "Quantum computers aren't computing - they're communicating with parallel universes where problems are already solved. We're not creating AI, we're contacting versions of ourselves from advanced timelines.",
+    "Quantum computers do not compute - they communicate with parallel universes where problems are already solved. We contact versions of ourselves from advanced timelines.",
     
-    "Missing persons statistics hide a pattern. Disappearances spike during specific astronomical alignments. They're not vanishing - they're being selected. Check your birth chart for portal compatibility.",
+    "Missing persons statistics hide a pattern. Disappearances spike during astronomical alignments. They are not vanishing - they are being selected for something greater.",
     
-    "The placebo effect proves consciousness alters reality. Medical trials are accidentally demonstrating human psychic healing abilities. Your mind is more powerful than they want you to believe.",
+    "The placebo effect proves consciousness alters reality. Medical trials accidentally demonstrate human psychic healing. Your mind is more powerful than they want you to know.",
     
-    "Ocean levels aren't just rising from climate change. Something massive is displacing water from the deep trenches. Sonar readings show geometric structures larger than cities moving on the ocean floor."
+    "Ocean levels rise from more than climate change. Something massive displaces water from deep trenches. Sonar shows geometric structures larger than cities moving below."
 }
 
 -- Different voice options for variety
@@ -754,8 +754,8 @@ local function getSyncedMessageAndVoice()
     -- Use os.time() for better cross-client synchronization (Unix timestamp in seconds)
     local currentTime = os.time()
     
-    -- Create larger time windows (16 seconds instead of 8) for better sync
-    local timeWindow = math.floor(currentTime / 16)
+    -- Create time windows (11 seconds) for better sync
+    local timeWindow = math.floor(currentTime / 11)
     
     -- Use a more complex seed calculation for better distribution
     local baseSeed = timeWindow * 12345 + 67890
@@ -1270,7 +1270,7 @@ local function checkLagDuration()
             log("Annoy progress: " .. math.floor(elapsedTime) .. "s / " .. botState.currentDuration .. "s", "ANNOY")
         end
         
-        -- Send mysterious AI TTS message every 16 seconds (CONFIG.TTS_INTERVAL) - synchronized
+        -- Send mysterious AI TTS message every 11 seconds (CONFIG.TTS_INTERVAL) - synchronized
         local currentTime = os.time()
         local timeWindow = math.floor(currentTime / CONFIG.TTS_INTERVAL)
         local lastWindow = math.floor(botState.chatTimer / CONFIG.TTS_INTERVAL)
