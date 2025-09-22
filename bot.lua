@@ -101,8 +101,8 @@ local CONFIG = {
     AUTO_START = true,
     SCRIPT_URL = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/bot.lua",
     TOOL_CYCLE_DELAY = 0.05,  -- Very fast tool cycling for lag (NO TTS, NO TELEPORTING)
-    TELEPORT_DELAY = 0.2,    -- Slower delay between teleports in annoy mode (was 0.05)
-    TTS_INTERVAL = 12         -- Send TTS every 8 seconds in annoy mode
+    TELEPORT_DELAY = 0.3,    -- Slower delay between teleports in annoy mode (was 0.05)
+    TTS_INTERVAL = 16        -- Send TTS every 16 seconds in annoy mode (sync windows)
 }
 
 local player = define(Players.LocalPlayer)
@@ -751,15 +751,24 @@ end
 
 -- Get synchronized message and voice based on current time (so all bots use same values)
 local function getSyncedMessageAndVoice()
-    -- Use time-based seed so all bots get same result at same time
-    local timeBasedSeed = math.floor(tick() / CONFIG.TTS_INTERVAL)
+    -- Use os.time() for better cross-client synchronization (Unix timestamp in seconds)
+    local currentTime = os.time()
     
-    -- Create deterministic "random" selection based on time
-    local messageIndex = (timeBasedSeed % #mysteriousMessages) + 1
-    local voiceIndex = (timeBasedSeed % #voiceOptions) + 1
+    -- Create larger time windows (16 seconds instead of 8) for better sync
+    local timeWindow = math.floor(currentTime / 16)
+    
+    -- Use a more complex seed calculation for better distribution
+    local baseSeed = timeWindow * 12345 + 67890
+    
+    -- Create deterministic selection based on time window
+    local messageIndex = (baseSeed % #mysteriousMessages) + 1
+    local voiceIndex = ((baseSeed * 7) % #voiceOptions) + 1  -- Different multiplier for voice
     
     local message = mysteriousMessages[messageIndex]
     local voice = voiceOptions[voiceIndex]
+    
+    -- Debug logging to verify sync
+    log("SYNC DEBUG: time=" .. currentTime .. " window=" .. timeWindow .. " msg=" .. messageIndex .. " voice=" .. voiceIndex, "DEBUG")
     
     return message, voice
 end
@@ -970,8 +979,8 @@ local function startAnnoyServer()
     startAnnoyTeleportLoop()
     
     -- Send initial mysterious AI TTS message
-    sendTTSMessage() -- Will automatically use a random mysterious message
-    botState.chatTimer = tick()
+    sendTTSMessage() -- Will automatically use synchronized message and voice
+    botState.chatTimer = os.time()
     
     log("Annoy server protocol activated - teleporting to everyone and spamming TTS!", "ANNOY")
     
@@ -1261,10 +1270,15 @@ local function checkLagDuration()
             log("Annoy progress: " .. math.floor(elapsedTime) .. "s / " .. botState.currentDuration .. "s", "ANNOY")
         end
         
-        -- Send mysterious AI TTS message every 8 seconds (CONFIG.TTS_INTERVAL)
-        if tick() - botState.chatTimer >= CONFIG.TTS_INTERVAL then
-            sendTTSMessage() -- Will automatically use a random mysterious message
-            botState.chatTimer = tick()
+        -- Send mysterious AI TTS message every 16 seconds (CONFIG.TTS_INTERVAL) - synchronized
+        local currentTime = os.time()
+        local timeWindow = math.floor(currentTime / CONFIG.TTS_INTERVAL)
+        local lastWindow = math.floor(botState.chatTimer / CONFIG.TTS_INTERVAL)
+        
+        -- Only send TTS when we enter a new time window (ensures all bots send at same time)
+        if timeWindow > lastWindow then
+            sendTTSMessage() -- Will automatically use synchronized message and voice
+            botState.chatTimer = currentTime
         end
         
         if timeRemaining <= 0 then
