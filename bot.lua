@@ -33,6 +33,64 @@ local TeleportService = define(gs("TeleportService"))
 local TextChatService = define(gs("TextChatService"))
 
 local TTS = ReplicatedStorage and ReplicatedStorage:FindFirstChild("TTS")
+local player = define(Players.LocalPlayer)
+
+-- Anti-AFK system to prevent kicks
+local antiAFKEnabled = true
+local lastAntiAFKTime = 0
+local ANTI_AFK_INTERVAL = 300 -- 5 minutes (300 seconds)
+
+local function performAntiAFK()
+    if not antiAFKEnabled then return end
+    
+    -- Don't perform anti-AFK if bot is actively doing something
+    if botState and (botState.isLagging or botState.isAnnoying or botState.status == "attacking" or botState.status == "annoying") then
+        log("Skipping anti-AFK - bot is active", "SYSTEM")
+        return
+    end
+    
+    pcall(function()
+        if player and player.Character and player.Character:FindFirstChild("Humanoid") then
+            local humanoid = player.Character.Humanoid
+            
+            -- Method 1: Small jump
+            humanoid.Jump = true
+            task.wait(0.1)
+            humanoid.Jump = false
+            
+            -- Method 2: Simulate input events
+            local VirtualInputManager = game:GetService("VirtualInputManager")
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+            task.wait(0.05)
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+            
+            -- Method 3: Move camera slightly (only if not in annoy mode)
+            if workspace.CurrentCamera and not (botState and botState.isAnnoying) then
+                local currentCFrame = workspace.CurrentCamera.CFrame
+                workspace.CurrentCamera.CFrame = currentCFrame * CFrame.Angles(0, math.rad(0.1), 0)
+                task.wait(0.05)
+                workspace.CurrentCamera.CFrame = currentCFrame
+            end
+            
+            log("Anti-AFK performed successfully", "SYSTEM")
+        end
+    end)
+end
+
+-- Start anti-AFK loop
+spawn(function()
+    while antiAFKEnabled do
+        local currentTime = tick()
+        
+        -- Perform anti-AFK every 5 minutes
+        if currentTime - lastAntiAFKTime >= ANTI_AFK_INTERVAL then
+            performAntiAFK()
+            lastAntiAFKTime = currentTime
+        end
+        
+        task.wait(30) -- Check every 30 seconds
+    end
+end)
 
 -- Configuration
 local CONFIG = {
@@ -597,20 +655,16 @@ local function toolCycleLoop()
     end)
 end
 
--- TTS function for annoy server
+-- TTS function for annoy server (exact same as script.lua)
 local function sendTTSMessage(message, voice)
-    if TTS then
-        local success, err = pcall(function()
+    pcall(function()
+        if TTS then
             TTS:FireServer(message, voice or "9")
-        end)
-        if not success then
-            log("TTS failed: " .. tostring(err), "ERROR")
+            log("TTS sent successfully", "ANNOY")
         else
-            log("TTS sent: " .. message, "ANNOY")
+            log("TTS remote not found!", "WARNING")
         end
-    else
-        log("TTS remote not found!", "WARNING")
-    end
+    end)
 end
 
 -- Noclip function to prevent collisions (from example.lua)
@@ -718,8 +772,8 @@ local function startAnnoyServer()
     -- Start teleport loop (like example.lua - no avatar copying or tools for annoy mode)
     startAnnoyTeleportLoop()
     
-    -- Send initial TTS message
-    sendTTSMessage("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "9")
+    -- Send initial TTS message (exact same as script.lua)
+    sendTTSMessage("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "9")
     botState.chatTimer = tick()
     
     log("Annoy server protocol activated - teleporting to everyone and spamming TTS!", "ANNOY")
@@ -994,9 +1048,9 @@ local function checkLagDuration()
             log("Annoy progress: " .. math.floor(elapsedTime) .. "s / " .. botState.currentDuration .. "s", "ANNOY")
         end
         
-        -- Send TTS message every 8 seconds (CONFIG.TTS_INTERVAL)
+        -- Send TTS message every 8 seconds (CONFIG.TTS_INTERVAL) - exact same as script.lua
         if tick() - botState.chatTimer >= CONFIG.TTS_INTERVAL then
-            sendTTSMessage("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "9")
+            sendTTSMessage("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "9")
             botState.chatTimer = tick()
         end
         
@@ -1238,9 +1292,19 @@ _G.StresserBot = {
             botState.teleportStartTime = 0
             botState.isLagging = false
             botState.lagEndTime = 0
+            antiAFKEnabled = false -- Disable anti-AFK when stopping bot
             log("Bot stopped manually", "SYSTEM")
             saveBotStatus("OFFLINE")
         end
+    end,
+    toggleAntiAFK = function(enabled)
+        if enabled == nil then
+            antiAFKEnabled = not antiAFKEnabled
+        else
+            antiAFKEnabled = enabled
+        end
+        log("Anti-AFK " .. (antiAFKEnabled and "enabled" or "disabled"), "SYSTEM")
+        return antiAFKEnabled
     end,
     reset = function()
         log("Resetting bot status to recover from stuck state", "SYSTEM")
