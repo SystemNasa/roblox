@@ -582,7 +582,7 @@ local function startAnnoyServer()
     startAnnoyTeleportLoop()
     
     -- Send initial TTS message
-    sendTTSMessage("yyyyyyyyyyyyyyyyyyyyyyyyy", "9")
+    sendTTSMessage("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "9")
     botState.chatTimer = tick()
     
     log("Annoy server protocol activated - teleporting to everyone and spamming TTS!", "ANNOY")
@@ -834,7 +834,7 @@ local function checkLagDuration()
         
         -- Send TTS message every 8 seconds (CONFIG.TTS_INTERVAL)
         if tick() - botState.chatTimer >= CONFIG.TTS_INTERVAL then
-            sendTTSMessage("yyyyyyyyyyyyyyyyyyyyyyyyy", "9")
+            sendTTSMessage("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "9")
             botState.chatTimer = tick()
         end
         
