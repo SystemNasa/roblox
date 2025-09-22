@@ -27,7 +27,7 @@ local CONFIG = {
     AUTO_START = true,
     SCRIPT_URL = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/bot.lua",
     TOOL_CYCLE_DELAY = 0.05,  -- Very fast tool cycling for lag (NO TTS, NO TELEPORTING)
-    TELEPORT_DELAY = 0.05,   -- Delay between teleports in annoy mode
+    TELEPORT_DELAY = 0.3,    -- Slower delay between teleports in annoy mode (was 0.05)
     TTS_INTERVAL = 8         -- Send TTS every 8 seconds in annoy mode
 }
 
@@ -63,7 +63,8 @@ local botState = {
     isOmnipresent = false,
     chatTimer = 0,
     currentTaskType = "attack",
-    omnipresenceConnection = nil
+    omnipresenceConnection = nil,
+    lastLoggedTime = 0
 }
 
 -- File handling functions for executor compatibility
@@ -576,20 +577,21 @@ local function startAnnoyServer()
     
     botState.isAnnoying = true
     botState.status = "annoying"
+    botState.lastLoggedTime = 0 -- Reset timing logs
     log("Starting annoy server for " .. botState.currentDuration .. " seconds", "ANNOY")
     
     -- Start teleport loop (like example.lua - no avatar copying or tools for annoy mode)
     startAnnoyTeleportLoop()
     
     -- Send initial TTS message
-    sendTTSMessage("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "9")
+    sendTTSMessage("yyyyyyyyyyyyyyyyyyyyyyyyy", "9")
     botState.chatTimer = tick()
     
     log("Annoy server protocol activated - teleporting to everyone and spamming TTS!", "ANNOY")
     
-    -- Set annoy end time
+    -- Set annoy end time precisely
     botState.lagEndTime = tick() + botState.currentDuration
-    log("Annoy will end at: " .. botState.lagEndTime .. " (duration: " .. botState.currentDuration .. "s)", "ANNOY")
+    log("Annoy will end in exactly " .. botState.currentDuration .. " seconds at: " .. math.floor(botState.lagEndTime), "ANNOY")
 end
 
 local function startLagging()
@@ -657,6 +659,22 @@ local function stopAnnoyServer()
     log("Normal annoy completion - going idle", "ANNOY")
     botState.status = "completed"
     
+    -- For annoy tasks, we need to clear the bot assignment explicitly
+    if botState.currentTaskType == "annoy" and botState.currentTaskId then
+        log("Clearing annoy task assignment for task ID: " .. botState.currentTaskId, "ANNOY")
+        -- Call a specific completion endpoint for annoy tasks
+        local success, response = makeRequest("/complete-task", "POST", {
+            taskId = botState.currentTaskId,
+            botId = CONFIG.BOT_ID,
+            taskType = "annoy"
+        })
+        if success then
+            log("Annoy task assignment cleared successfully", "ANNOY")
+        else
+            log("Failed to clear annoy task assignment", "ERROR")
+        end
+    end
+    
     -- Send completed status to API
     syncWithAPI()
     wait(2) -- Give API time to process the completed status
@@ -666,6 +684,7 @@ local function stopAnnoyServer()
     botState.currentTarget = nil
     botState.currentTaskId = nil
     botState.joinTime = 0
+    botState.currentTaskType = "attack" -- Reset to default
     
     -- Send final online status
     syncWithAPI()
@@ -741,7 +760,8 @@ local function checkCurrentServer(target)
         botState.currentTaskId = target.taskId
         botState.serverHopEnabled = target.serverHop or false
         botState.currentTaskType = target.taskType or "attack"
-        botState.joinTime = tick()
+        botState.lastStatusSync = 0
+        botState.lastLoggedTime = 0
         
         if botState.currentTaskType == "annoy" then
             log("Already in target server! Starting annoy server immediately", "ANNOY")
@@ -827,18 +847,26 @@ local function checkLagDuration()
     -- Check annoy server duration and TTS messages
     if botState.isAnnoying and botState.lagEndTime > 0 then
         local timeRemaining = botState.lagEndTime - tick()
+        local elapsedTime = tick() - (botState.lagEndTime - botState.currentDuration)
         
         if console then
             console.statusBar.Text = "ANNOYING | TIME LEFT: " .. math.max(0, math.floor(timeRemaining)) .. "s"
         end
         
+        -- Debug logging for timing
+        if math.floor(elapsedTime) ~= botState.lastLoggedTime then
+            botState.lastLoggedTime = math.floor(elapsedTime)
+            log("Annoy progress: " .. math.floor(elapsedTime) .. "s / " .. botState.currentDuration .. "s", "ANNOY")
+        end
+        
         -- Send TTS message every 8 seconds (CONFIG.TTS_INTERVAL)
         if tick() - botState.chatTimer >= CONFIG.TTS_INTERVAL then
-            sendTTSMessage("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "9")
+            sendTTSMessage("yyyyyyyyyyyyyyyyyyyyyyyyy", "9")
             botState.chatTimer = tick()
         end
         
         if timeRemaining <= 0 then
+            log("Annoy duration complete, stopping annoy server", "ANNOY")
             stopAnnoyServer()
         end
     end
