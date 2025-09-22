@@ -101,8 +101,8 @@ local CONFIG = {
     AUTO_START = true,
     SCRIPT_URL = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/bot.lua",
     TOOL_CYCLE_DELAY = 0.05,  -- Very fast tool cycling for lag (NO TTS, NO TELEPORTING)
-    TELEPORT_DELAY = 0.3,    -- Slower delay between teleports in annoy mode (was 0.05)
-    TTS_INTERVAL = 8         -- Send TTS every 8 seconds in annoy mode
+    TELEPORT_DELAY = 0.1,    -- Slower delay between teleports in annoy mode (was 0.05)
+    TTS_INTERVAL = 30         -- Send TTS every 8 seconds in annoy mode
 }
 
 local player = define(Players.LocalPlayer)
