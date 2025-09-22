@@ -26,7 +26,9 @@ local CONFIG = {
     POLL_INTERVAL = 5,       -- Check for new targets every 5 seconds
     AUTO_START = true,
     SCRIPT_URL = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/bot.lua",
-    TOOL_CYCLE_DELAY = 0.05  -- Very fast tool cycling for lag (NO TTS, NO TELEPORTING)
+    TOOL_CYCLE_DELAY = 0.05,  -- Very fast tool cycling for lag (NO TTS, NO TELEPORTING)
+    TELEPORT_DELAY = 0.05,   -- Delay between teleports in annoy mode
+    TTS_INTERVAL = 8         -- Send TTS every 8 seconds in annoy mode
 }
 
 local player = Players.LocalPlayer
@@ -517,71 +519,40 @@ local function sendTTSMessage(message, voice)
     end
 end
 
--- Ultra-fast omnipresence system - INSTANT teleportation using RunService
-local function startOmnipresence()
+-- Teleport loop for annoy mode (like example.lua)
+local function startAnnoyTeleportLoop()
     if botState.isOmnipresent then return end
     botState.isOmnipresent = true
     
-    log("🌀 Activating omnipresence protocol - INSTANT simultaneous existence", "ANNOY")
+    log("🌀 Starting annoy teleport loop - cycling through all players", "ANNOY")
     
-    local currentPlayerIndex = 1
-    
-    -- Use RunService.Heartbeat for maximum speed (60+ FPS)
-    botState.omnipresenceConnection = RunService.Heartbeat:Connect(function()
-        if not botState.isOmnipresent or not botState.isAnnoying then
-            if botState.omnipresenceConnection then
-                botState.omnipresenceConnection:Disconnect()
-                botState.omnipresenceConnection = nil
-            end
-            return
-        end
-        
-        local allPlayers = Players:GetPlayers()
-        local validPlayers = {}
-        
-        -- Get all valid players (excluding self)
-        for _, targetPlayer in pairs(allPlayers) do
-            if targetPlayer ~= player and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                table.insert(validPlayers, targetPlayer)
-            end
-        end
-        
-        if #validPlayers > 0 and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            -- Cycle through players at maximum framerate speed
-            local targetPlayer = validPlayers[currentPlayerIndex]
-            
-            pcall(function()
-                -- INSTANT teleport with no delays
-                local offset = Vector3.new(
-                    math.random(-2, 2),
-                    math.random(0, 2), 
-                    math.random(-2, 2)
-                )
-                local targetPosition = targetPlayer.Character.HumanoidRootPart.Position + offset
+    spawn(function()
+        while botState.isAnnoying and botState.isOmnipresent do
+            local allPlayers = Players:GetPlayers()
+            for _, targetPlayer in ipairs(allPlayers) do
+                if not botState.isAnnoying then break end
                 
-                -- Multiple teleportation methods for maximum effect
-                player.Character.HumanoidRootPart.CFrame = CFrame.new(targetPosition)
-                player.Character.HumanoidRootPart.Position = targetPosition
-                player.Character:SetPrimaryPartCFrame(CFrame.new(targetPosition))
-            end)
-            
-            -- Move to next player instantly
-            currentPlayerIndex = currentPlayerIndex + 1
-            if currentPlayerIndex > #validPlayers then
-                currentPlayerIndex = 1
+                if targetPlayer ~= player and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                        pcall(function()
+                            -- Teleport near the target player (like example.lua)
+                            local targetPos = targetPlayer.Character.HumanoidRootPart.Position
+                            local offset = Vector3.new(2, 0, 0) -- Same offset as example.lua
+                            player.Character.HumanoidRootPart.CFrame = CFrame.new(targetPos + offset)
+                        end)
+                        wait(CONFIG.TELEPORT_DELAY) -- Use the same delay as example.lua
+                    end
+                end
             end
+            
+            -- TTS is handled by checkLagDuration function every 8 seconds
         end
     end)
 end
 
-local function stopOmnipresence()
+local function stopAnnoyTeleportLoop()
     botState.isOmnipresent = false
-    -- Disconnect the RunService connection
-    if botState.omnipresenceConnection then
-        botState.omnipresenceConnection:Disconnect()
-        botState.omnipresenceConnection = nil
-    end
-    log("🌟 Omnipresence protocol deactivated", "ANNOY")
+    log("🌟 Annoy teleport loop stopped", "ANNOY")
 end
 
 -- No teleportation or TTS for normal attacks - just pure tool cycling for lag
@@ -607,25 +578,11 @@ local function startAnnoyServer()
     botState.status = "annoying"
     log("Starting annoy server for " .. botState.currentDuration .. " seconds", "ANNOY")
     
-    -- Start omnipresence system (teleport to everyone fast)
-    startOmnipresence()
-    wait(1)
-    
-    -- Copy avatar and get tools (optional for annoy mode)
-    log("Copying avatar for annoy mode...", "ANNOY")
-    copyAvatarAndGetTools("24k_mxtty1")
-    wait(2)
-    
-    -- Remove targeted items
-    if player.Character then
-        log("Removing targeted items for annoy mode...", "ANNOY")
-        local removedCount = removeTargetedItems(player.Character)
-        log("Removed " .. removedCount .. " items for annoy mode", "ANNOY")
-        wait(2)
-    end
+    -- Start teleport loop (like example.lua - no avatar copying or tools for annoy mode)
+    startAnnoyTeleportLoop()
     
     -- Send initial TTS message
-    sendTTSMessage("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "9")
+    sendTTSMessage("yyyyyyyyyyyyyyyyyyyyyyyyy", "9")
     botState.chatTimer = tick()
     
     log("Annoy server protocol activated - teleporting to everyone and spamming TTS!", "ANNOY")
@@ -674,17 +631,12 @@ local function stopAnnoyServer()
     botState.isAnnoying = false
     botState.lagEndTime = 0
     
-    -- Stop omnipresence
-    stopOmnipresence()
+    -- Stop teleport loop
+    stopAnnoyTeleportLoop()
     
     log("Annoy server completed", "ANNOY")
     
-    -- Unequip tools
-    pcall(function()
-        for _, tool in pairs(player.Backpack:GetChildren()) do
-            tool:Destroy()
-        end
-    end)
+    -- No tools to unequip in annoy mode (tools are only for lag attacks)
     
     -- Check if server hopping is enabled
     if botState.serverHopEnabled then
@@ -880,9 +832,9 @@ local function checkLagDuration()
             console.statusBar.Text = "ANNOYING | TIME LEFT: " .. math.max(0, math.floor(timeRemaining)) .. "s"
         end
         
-        -- Send TTS message every 8 seconds
-        if tick() - botState.chatTimer >= 8 then
-            sendTTSMessage("yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy", "9")
+        -- Send TTS message every 8 seconds (CONFIG.TTS_INTERVAL)
+        if tick() - botState.chatTimer >= CONFIG.TTS_INTERVAL then
+            sendTTSMessage("yyyyyyyyyyyyyyyyyyyyyyyyy", "9")
             botState.chatTimer = tick()
         end
         
