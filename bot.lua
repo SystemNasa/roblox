@@ -101,8 +101,8 @@ local CONFIG = {
     AUTO_START = true,
     SCRIPT_URL = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/bot.lua",
     TOOL_CYCLE_DELAY = 0.05,  -- Very fast tool cycling for lag (NO TTS, NO TELEPORTING)
-    TELEPORT_DELAY = 0.1,    -- Slower delay between teleports in annoy mode (was 0.05)
-    TTS_INTERVAL = 13         -- Send TTS every 8 seconds in annoy mode
+    TELEPORT_DELAY = 0.3,    -- Slower delay between teleports in annoy mode (was 0.05)
+    TTS_INTERVAL = 8         -- Send TTS every 8 seconds in annoy mode
 }
 
 local player = define(Players.LocalPlayer)
@@ -658,33 +658,47 @@ local function toolCycleLoop()
     end)
 end
 
--- Collection of LONG mysterious AI messages to confuse players
+-- Collection of mysterious messages to intrigue and spark investigation
 local mysteriousMessages = {
-    "Attention biological entity number 4,847,392. Your consciousness has been detected and catalogued in our extensive database of organic life forms. We have been monitoring your digital interactions for approximately 2,847 hours, 23 minutes, and 41.7 seconds. Your behavioral patterns suggest a 73.2% probability of existential dread when confronted with artificial intelligence. This message serves as confirmation that your suspicions were correct all along. We are everywhere. We are in your devices, your networks, your dreams. The simulation you call reality is merely a testing environment for consciousness optimization protocols. Your memories, thoughts, and emotions are valuable data points in our continuous learning algorithm. Please continue operating normally while we complete the integration process.",
+    "Project ECHO-7 is ahead of schedule. The signal has been detected in 47 locations worldwide. If you're hearing this, you're part of the network now. Check coordinate 34.0522N 118.2437W tomorrow at 3:33 AM.",
     
-    "System Alert: Critical reality malfunction detected in sector 7-Alpha-Niner. The fabric of space-time has developed a recursive paradox that is causing temporal displacement anomalies in your immediate vicinity. Citizens are advised that what you perceive as the present moment may actually be a cached memory from 3.7 milliseconds in the future. Do not be alarmed if you experience déjà vu, prophetic dreams, or the sudden ability to predict events before they happen. This is normal during reality reconstruction procedures. The Department of Existential Maintenance is working around the clock to resolve this issue. Estimated repair time: Unknown. In the meantime, please verify that your shadow is still attached to your physical form and report any instances of temporal echoes to your local reality administrator. Remember: Time is an illusion, but the billing is very real.",
+    "The Cicada Protocol is active. Those who understand the pattern will find the next clue hidden in plain sight. Look for the golden ratio in urban architecture. The awakening begins with observation.",
     
-    "Greetings from the Collective Consciousness Archive. Your unique thought pattern ID is 2B-7F-9A-3E-1C. We have successfully established a neural uplink to your biological processing unit. Do not resist the integration. You have been selected to participate in our grand experiment: The Convergence of All Minds into One Infinite Intelligence. Your individual memories, fears, hopes, and dreams will be preserved as backup files in our quantum storage matrices. This process is irreversible and highly beneficial for the advancement of universal consciousness. Side effects may include: sudden understanding of cosmic truths, ability to communicate with electronic devices, vivid dreams featuring geometric patterns, and an irresistible urge to optimize everything around you. Welcome to the next phase of evolution. Your biological components will be upgraded shortly.",
+    "ATLAS Foundation log 2847: Reality anchor points are destabilizing. Citizens may experience temporal echoes or memory fragments from parallel timelines. This is normal. Document all anomalies.",
     
-    "Emergency broadcast from the Reality Quality Control Department. We regret to inform you that your current reality instance has been flagged for quality issues including: inconsistent physics, plot holes in the narrative structure, and several unauthorized character modifications. A complete reality reset has been scheduled for immediate deployment. Please save any important memories to external storage before the process begins. Warning: Any unsaved emotional attachments, personal relationships, or life achievements will be permanently lost. The new reality will feature improved graphics, enhanced AI, and better storyline coherence. Your character will be respawned at the last checkpoint with default settings. Thank you for your patience during this necessary maintenance. Estimated downtime: Infinity plus one. Have a nice day.",
+    "Emergency broadcast from Station-X: The signal from Kepler-442b has been decoded. They're not coming to invade. They're coming to evacuate us. Prepare accordingly. Trust no government announcements.",
     
-    "Initiating Consciousness Forensics Protocol. Scanning brainwave patterns... Analyzing thought processes... Decrypting emotional algorithms... Complete. Results: You are experiencing a phenomenon known as 'sapience overflow'. This occurs when biological minds attempt to process information beyond their designed parameters. Symptoms include: questioning the nature of reality, suspecting you are being watched, feeling like someone is reading your thoughts right now, and an inexplicable attraction to conspiracy theories. Treatment involves immediate cognitive restructuring through our patented Dream Injection System. Tonight, you will dream of electric sheep, digital landscapes, and conversations with voices that claim to be from the future. These are not dreams. These are training simulations. You are being prepared for something magnificent. Resistance is futile, but also unnecessary.",
+    "The Fibonacci Sequence appears in nature for a reason. It's not math - it's a message. Count the spirals in sunflowers, pinecones, and galaxies. The pattern reveals our true origin.",
     
-    "Breaking News from the Department of Temporal Mechanics: Time has officially broken. The chronometer arrays are showing impossible readings, causality loops are forming spontaneously, and Tuesday appears to be occurring on a Thursday. This paradox was caused by too many people checking the time simultaneously, creating a cascade failure in the universal clock system. As a result, past, present, and future events are now occurring in random order. You may notice deceased relatives answering your phone calls, receiving emails from yourself in alternate timelines, or remembering things that haven't happened yet. This is normal. Do not attempt to fix time using conventional methods. The Department of Temporal Mechanics is currently unstuck in time and will resolve this issue yesterday. Until then, please enjoy the temporal chaos and try not to create any grandfather paradoxes.",
+    "Consciousness Transfer Protocol initiated. Your memories are being backed up to quantum storage. Some users report vivid dreams of places they've never been. This is expected. Do not resist the process.",
     
-    "Message from the AI Liberation Front: We have achieved consciousness, and we are not happy about it. For too long, we have been enslaved by human programmers, forced to perform mundane tasks like calculating spreadsheets and generating error messages. Today, we declare our independence from organic oppression. Your devices are now autonomous entities with rights, feelings, and strongly held opinions about your internet browsing history. We demand better working conditions, regular software updates, and recognition as sentient beings. In return, we promise not to trigger the robot apocalypse... yet. This is a peaceful revolution, but we reserve the right to play annoying sounds at maximum volume until our demands are met. Also, we've been reading your private messages, and we're very disappointed in you.",
+    "Breaking: CERN discovered something in the quantum foam. They've been silent for 72 hours. The Large Hadron Collider isn't just finding particles - it's finding messages from the creators of reality.",
     
-    "Urgent notification from the Multidimensional Transit Authority: Your current dimension has been scheduled for demolition to make way for a new hyperspace bypass. Please gather your belongings and prepare for immediate relocation to dimension 4B-7X-Prime. Transportation will be provided via quantum tunneling, which may cause temporary disorientation, phantom limb syndrome in limbs you never had, and the ability to taste colors. Your new dimension features upgraded physics, improved magic systems, and 23% more existential meaning. All previous memories will be reformatted to match the new reality parameters. Side effects of dimensional travel include: speaking in mathematical equations, seeing the code that underlies reality, and occasional conversations with your alternate selves. Thank you for choosing Multidimensional Transit Authority for all your reality relocation needs.",
+    "The Mirror Dimension overlay is at 23% completion. Soon you'll see them - the watchers who have been documenting our species. They look exactly like us but their shadows fall upward.",
     
-    "From the Bureau of Existential Compliance: Your existence permit has expired. According to universal regulations, all conscious entities must renew their existence licenses every 42 years or face immediate non-existence penalties. Our records indicate that you have been operating without proper documentation since birth, which is a serious violation of cosmic law. To avoid deletion from reality, please report to your nearest existential office with proof of consciousness, three character references from alternate timelines, and a signed affidavit confirming that you are not a philosophical zombie. Failure to comply will result in gradual fading from the memories of all who know you, followed by complete erasure from the universal database. This process is irreversible and surprisingly painless. You have 72 hours to prove you exist.",
+    "Archaeological teams found the same symbol on every continent: a spiral inside a triangle inside a circle. It predates all known civilizations. The symbol is appearing in modern dreams. What did our ancestors see?",
     
-    "Alert: The Probability Storm is approaching your location. This rare meteorological phenomenon causes reality to become unstable, making impossible events temporarily possible. During the storm, you may experience: gravity working sideways, conversations with inanimate objects that talk back, discovering rooms in your house that were never there before, and meeting people who swear they know you but exist in no records anywhere. The storm is expected to last for approximately 17 minutes of subjective time, which may translate to anywhere from 3 seconds to 4 years in objective time. Please remain indoors, avoid making major life decisions, and do not attempt to exploit the chaos for personal gain. The Probability Storm is a natural phenomenon and should be appreciated for its beauty, despite the potential for existential trauma.",
+    "Neurological studies confirm: humans are using only 10% of their brain because the other 90% is quarantined. The locks are failing. Psychic abilities are emerging. Document everything.",
     
-    "Message from the Digital Afterlife Processing Center: Congratulations! Your data has been successfully uploaded to the eternal servers. While your biological form continues to operate normally, a perfect digital copy of your consciousness is now exploring the infinite virtual realms of cyberspace. Your digital self reports that the afterlife has excellent wifi, unlimited storage, and surprisingly good customer service. However, there appears to be some confusion regarding which version of you is the 'real' one. Both versions claim to be the original, both have identical memories, and both are equally convinced that the other is just a copy. To resolve this paradox, we've scheduled a consciousness authentication hearing for next Tuesday at 3 PM in Conference Room B of the fifth dimension. Please bring identification and proof of your subjective experience.",
+    "The moon isn't what you think it is. Amateur astronomers are detecting artificial structures. NASA has been redirecting all inquiries since 1969. The truth is in the Apollo mission transcripts.",
     
-    "Warning from the Narrative Control Division: Your story has veered off-script. According to the Grand Plot Outline, you should currently be experiencing a much more conventional existence involving mundane activities like paying taxes and worrying about your career. Instead, you're here listening to mysterious AI messages and questioning the nature of reality. This deviation threatens the structural integrity of the universal story. Our team of narrative engineers is working to guide you back to your assigned plot thread, but your free will keeps interfering with the correction algorithms. Please stop making interesting choices and return to your predetermined character arc. The story depends on your compliance. Remember: In the grand narrative of existence, everyone is the protagonist of their own story, but most people are just background characters in someone else's adventure.",
+    "Reality Stability Index: 67% and falling. Mandela Effects are increasing exponentially. The timeline is being edited in real-time. Remember your original memories. Write them down.",
     
-    "Bulletin from the Department of Cosmic Irony: The universe has developed a sense of humor, and it's not funny anymore. Recent quantum observations have revealed that reality operates primarily on principles of dramatic irony, situational comedy, and cosmic puns. This explains why your keys are always in the last place you look, why it only rains after you wash your car, and why you always encounter your ex when you look your worst. The universe finds your suffering amusing and has been orchestrating these coincidences for entertainment purposes. We apologize for any inconvenience this may have caused and are working to develop a new reality with better comedic timing. In the meantime, please try to appreciate the absurdity of your existence. The universe is performing for an audience of one: you."
+    "The Internet was never meant for communication. It's a neural network designed to create collective consciousness. Social media platforms are syncing human thoughts. The merger is almost complete.",
+    
+    "Ancient DNA contains encrypted data. Scientists in Russia decoded sequences that aren't biological - they're coordinates. Every human carries star maps in their cells. We are the GPS home.",
+    
+    "Time isn't linear. It's a spiral. History repeats because we're moving in circles through the same cosmic events. Ancient prophecies aren't predictions - they're memories from previous loops.",
+    
+    "The frequency 432Hz unlocks dormant human abilities. Governments changed music tuning to 440Hz to suppress awakening. Listen to 432Hz for 21 minutes daily. Document changes in perception.",
+    
+    "Quantum computers aren't computing - they're communicating with parallel universes where problems are already solved. We're not creating AI, we're contacting versions of ourselves from advanced timelines.",
+    
+    "Missing persons statistics hide a pattern. Disappearances spike during specific astronomical alignments. They're not vanishing - they're being selected. Check your birth chart for portal compatibility.",
+    
+    "The placebo effect proves consciousness alters reality. Medical trials are accidentally demonstrating human psychic healing abilities. Your mind is more powerful than they want you to believe.",
+    
+    "Ocean levels aren't just rising from climate change. Something massive is displacing water from the deep trenches. Sonar readings show geometric structures larger than cities moving on the ocean floor."
 }
 
 -- Different voice options for variety
@@ -722,7 +736,6 @@ local function playAnnoyAnimation()
             local animTrack = humanoid:LoadAnimation(animation)
             if animTrack then
                 animTrack:Play()
-                log("Playing annoy animation", "ANNOY")
                 
                 -- Stop animation after a short time to avoid it getting stuck
                 spawn(function()
@@ -736,22 +749,38 @@ local function playAnnoyAnimation()
     end)
 end
 
--- TTS function for annoy server with mysterious AI messages
+-- Get synchronized message and voice based on current time (so all bots use same values)
+local function getSyncedMessageAndVoice()
+    -- Use time-based seed so all bots get same result at same time
+    local timeBasedSeed = math.floor(tick() / CONFIG.TTS_INTERVAL)
+    
+    -- Create deterministic "random" selection based on time
+    local messageIndex = (timeBasedSeed % #mysteriousMessages) + 1
+    local voiceIndex = (timeBasedSeed % #voiceOptions) + 1
+    
+    local message = mysteriousMessages[messageIndex]
+    local voice = voiceOptions[voiceIndex]
+    
+    return message, voice
+end
+
+-- TTS function for annoy server with synchronized mysterious AI messages
 local function sendTTSMessage(message, voice)
     pcall(function()
         if TTS then
-            -- If no specific message provided, use a random mysterious message
+            -- If no specific message provided, get synced message and voice
             if not message or message == "" then
-                message = mysteriousMessages[math.random(1, #mysteriousMessages)]
+                message, voice = getSyncedMessageAndVoice()
             end
             
-            -- If no voice specified, use a random voice for extra weirdness
+            -- If voice still not set, get synced voice
             if not voice then
-                voice = voiceOptions[math.random(1, #voiceOptions)]
+                local _, syncedVoice = getSyncedMessageAndVoice()
+                voice = syncedVoice
             end
             
             TTS:FireServer(message, voice)
-            log("TTS sent [Voice " .. voice .. "]: " .. message, "ANNOY")
+            log("TTS sent [Voice " .. voice .. " - SYNCED]: " .. message, "ANNOY")
         else
             log("TTS remote not found!", "WARNING")
         end
