@@ -381,6 +381,37 @@ local function syncWithAPI()
         log("API sync successful - Status: " .. botState.status)
         saveBotStatus(botState.status)
         
+        -- Check if we received a stop signal from the API
+        if data.botStatus == "stop_requested" then
+            log("🛑 STOP SIGNAL RECEIVED - Stopping all current actions immediately!", "SYSTEM")
+            
+            -- Stop lagging/annoying immediately
+            if botState.isLagging then
+                log("Stopping lag attack due to stop signal", "SYSTEM")
+                stopLagging()
+            end
+            
+            if botState.isAnnoying then
+                log("Stopping annoy server due to stop signal", "SYSTEM") 
+                stopAnnoyServer()
+            end
+            
+            -- Reset all states
+            botState.status = "online"
+            botState.currentTarget = nil
+            botState.currentTaskId = nil
+            botState.teleportRetries = 0
+            botState.teleportStartTime = 0
+            botState.isLagging = false
+            botState.isAnnoying = false
+            botState.lagEndTime = 0
+            botState.currentTaskType = "attack"
+            
+            saveBotStatus("online")
+            log("Bot stopped and reset to online status", "SYSTEM")
+            return nil
+        end
+        
         -- Check if our current attack was stopped by the API
         if (botState.status == "TELEPORTING" or botState.status == "teleporting" or botState.status == "attacking") and 
            botState.currentTaskId then
@@ -408,7 +439,8 @@ local function syncWithAPI()
         if data.task then
             local taskType = data.task.taskType or "attack"
             local taskName = taskType == "annoy" and "Annoy Server" or "Attack"
-            log("New " .. taskName .. " assigned: " .. data.task.placeId .. " | Duration: " .. data.task.duration .. "s | Server Hop: " .. tostring(data.task.serverHop or false))
+            local botMode = data.task.useAllBots and "ALL BOTS" or "SINGLE BOT"
+            log("New " .. taskName .. " assigned (" .. botMode .. "): " .. data.task.placeId .. " | Duration: " .. data.task.duration .. "s | Server Hop: " .. tostring(data.task.serverHop or false))
             return data.task
         end
         
