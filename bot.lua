@@ -658,47 +658,47 @@ local function toolCycleLoop()
     end)
 end
 
--- Collection of mysterious messages to intrigue and spark investigation (Roblox filter friendly)
+-- Collection of annoying ragebait messages to frustrate players
 local mysteriousMessages = {
-    "Project Echo Seven is ahead of schedule. The signal has been detected worldwide. If you hear this message, you are part of the network now. The awakening has begun.",
+    "You are not good at this game and everyone knows it. Stop pretending you are skilled when you clearly have no talent whatsoever.",
     
-    "The Cicada Protocol is active. Those who understand the pattern will find the next clue hidden in plain sight. Look for the golden ratio in architecture. Observation is key.",
+    "Your avatar looks absolutely terrible. Did you pick those clothes on purpose or do you just have no sense of style at all?",
     
-    "Foundation log entry: Reality anchor points are destabilizing. Citizens may experience memory fragments from parallel timelines. This is expected. Document all anomalies.",
+    "Why are you even playing this game when you obviously do not understand how anything works? Go play something easier for beginners.",
     
-    "Emergency broadcast: The signal from distant worlds has been decoded. They are not coming to invade. They are coming to evacuate us. Prepare accordingly.",
+    "I have been watching you play and you make the worst decisions possible every single time. It is actually impressive how bad you are.",
     
-    "The mathematical sequence appears in nature for a reason. It is not just numbers - it is a message. Count the spirals in flowers and galaxies. The pattern reveals our origin.",
+    "Your building skills are so poor that even a five year old could do better than whatever that mess is supposed to be.",
     
-    "Consciousness Transfer Protocol initiated. Your memories are being backed up to quantum storage. Some report vivid dreams of unknown places. This is expected.",
+    "Everyone in this server is laughing at you behind your back. You should probably leave before you embarrass yourself even more than you already have.",
     
-    "Scientists discovered something in the quantum realm. Research facilities have been silent for days. They found messages from the creators of reality itself.",
+    "The way you move around shows that you are definitely using a phone or tablet. Real players use computers. Mobile players do not belong in serious games.",
     
-    "The Mirror Dimension overlay is nearly complete. Soon you will see them - the watchers documenting our species. They look like us but their shadows fall upward.",
+    "You spent money on this game and you are still terrible at it. What a complete waste of your parents credit card money.",
     
-    "Archaeological teams found the same symbol on every continent. A spiral inside a triangle inside a circle. It predates all civilizations yet appears in modern dreams.",
+    "I bet you cannot even afford premium membership which is why you look so default and basic compared to everyone else here.",
     
-    "Brain studies confirm humans use only ten percent because the rest is quarantined. The locks are failing. Psychic abilities are emerging. Document everything you experience.",
+    "Stop trying so hard to be cool and funny because nobody thinks you are entertaining. You are just annoying everyone around you.",
     
-    "The moon is not what you think it is. Amateur astronomers detect artificial structures. Space agencies have been silent since the moon landings ended.",
+    "Your voice sounds like a squeaky mouse and nobody wants to hear you talk in voice chat. Please stay muted for everyones sake.",
     
-    "Reality Stability Index is falling rapidly. Timeline edits are increasing exponentially. The past is being changed in real time. Remember your original memories.",
+    "You are the reason why this game is becoming worse. Players like you ruin the experience for everyone else who actually knows what they are doing.",
     
-    "The Internet was never meant for communication. It is a neural network creating collective consciousness. Social platforms are syncing human thoughts together.",
+    "I can tell you do not have any friends in real life because of how desperately you try to make friends in online games.",
     
-    "Ancient genetic code contains encrypted data. Scientists decoded sequences that are not biological - they are star maps. Every human carries coordinates home.",
+    "Your username is cringe and shows that you probably created this account when you were seven years old and never grew up since then.",
     
-    "Time is not linear. It is a spiral. History repeats because we move in circles through the same cosmic events. Prophecies are memories from previous loops.",
+    "You keep dying to the easiest enemies in the game which proves that you have terrible reflexes and hand eye coordination.",
     
-    "Certain sound frequencies unlock dormant human abilities. Governments changed music tuning to suppress awakening. The right frequency changes perception permanently.",
+    "Why do you keep asking for help with basic things that any normal person would figure out instantly? Use your brain for once.",
     
-    "Quantum computers do not compute - they communicate with parallel universes where problems are already solved. We contact versions of ourselves from advanced timelines.",
+    "Your inventory is full of the most worthless items possible. You clearly do not know which things are actually valuable or useful.",
     
-    "Missing persons statistics hide a pattern. Disappearances spike during astronomical alignments. They are not vanishing - they are being selected for something greater.",
+    "Every time you speak it becomes obvious that you are way too young to be playing this game. Go play something made for little kids instead.",
     
-    "The placebo effect proves consciousness alters reality. Medical trials accidentally demonstrate human psychic healing. Your mind is more powerful than they want you to know.",
+    "You have been playing for hours and still have not accomplished anything meaningful. Maybe gaming is just not for you at all.",
     
-    "Ocean levels rise from more than climate change. Something massive displaces water from deep trenches. Sonar shows geometric structures larger than cities moving below."
+    "The fact that you are still here listening to this message proves that you have nothing better to do with your sad lonely life."
 }
 
 -- Different voice options for variety
@@ -749,20 +749,17 @@ local function playAnnoyAnimation()
     end)
 end
 
--- Get synchronized message and voice based on current time (so all bots use same values)
+-- Get synchronized message (sequential order) and random voice
 local function getSyncedMessageAndVoice()
-    -- Use os.time() for better cross-client synchronization (Unix timestamp in seconds)
+    -- Use os.time() for time windows but only for message progression
     local currentTime = os.time()
+    local timeWindow = math.floor(currentTime / CONFIG.TTS_INTERVAL)
     
-    -- Create time windows (11 seconds) for better sync
-    local timeWindow = math.floor(currentTime / 11)
+    -- Calculate message index sequentially (cycles through 1, 2, 3... then back to 1)
+    local messageIndex = (timeWindow % #mysteriousMessages) + 1
     
-    -- Use a more complex seed calculation for better distribution
-    local baseSeed = timeWindow * 12345 + 67890
-    
-    -- Create deterministic selection based on time window
-    local messageIndex = (baseSeed % #mysteriousMessages) + 1
-    local voiceIndex = ((baseSeed * 7) % #voiceOptions) + 1  -- Different multiplier for voice
+    -- Keep voice random and not synced
+    local voiceIndex = math.random(1, #voiceOptions)
     
     local message = mysteriousMessages[messageIndex]
     local voice = voiceOptions[voiceIndex]
@@ -1180,6 +1177,51 @@ end
 
 local function executeAttack(target)
     if not target then return end
+    
+    -- Handle join-only tasks (short duration tasks meant just for joining)
+    if target.duration and target.duration <= 5 then
+        log("JOIN TASK: Just joining server, no attack/annoy", "SYSTEM")
+        -- Check if we're already in the target server
+        local currentPlaceId = tostring(game.PlaceId)
+        local currentJobId = game.JobId
+        
+        if currentPlaceId == target.placeId and currentJobId == target.jobId then
+            log("Already in target server - marking task as completed", "SYSTEM")
+            botState.status = "completed"
+            syncWithAPI()
+            wait(2)
+            botState.status = "online"
+            return
+        end
+        
+        -- Not in target server, teleport there
+        botState.currentTarget = target
+        botState.currentTaskId = target.taskId
+        botState.status = "teleporting"
+        
+        log("Teleporting to join server: " .. target.placeId, "SYSTEM")
+        
+        -- Queue the script to re-execute after teleport
+        queueTeleport([[
+            _G.StresserBotExecuted = nil
+            wait(3)
+            local success, script = pcall(function()
+                return game:HttpGet("]] .. CONFIG.SCRIPT_URL .. [[")
+            end)
+            if success and script and script ~= "" then
+                loadstring(script)()
+            end
+        ]])
+        
+        -- Teleport to target server
+        pcall(function()
+            local placeIdNum = tonumber(target.placeId)
+            if placeIdNum then
+                TeleportService:TeleportToPlaceInstance(placeIdNum, target.jobId)
+            end
+        end)
+        return
+    end
     
     -- Check if we're already in the target server
     if checkCurrentServer(target) then
