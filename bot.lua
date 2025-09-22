@@ -101,8 +101,8 @@ local CONFIG = {
     AUTO_START = true,
     SCRIPT_URL = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/bot.lua",
     TOOL_CYCLE_DELAY = 0.05,  -- Very fast tool cycling for lag (NO TTS, NO TELEPORTING)
-    TELEPORT_DELAY = 0.1,    -- Slower delay between teleports in annoy mode (was 0.05)
-    TTS_INTERVAL = 11         -- Send TTS every 8 seconds in annoy mode
+    TELEPORT_DELAY = 0.3,    -- Slower delay between teleports in annoy mode (was 0.05)
+    TTS_INTERVAL = 8         -- Send TTS every 8 seconds in annoy mode
 }
 
 local player = define(Players.LocalPlayer)
@@ -836,14 +836,36 @@ local function startAnnoyServer()
     botState.lastLoggedTime = 0 -- Reset timing logs
     log("Starting annoy server for " .. botState.currentDuration .. " seconds", "ANNOY")
     
-    -- Fire RoomExtra remote first (from Sigma Spy)
+    -- Activate RoomExtra proximity prompt first
     pcall(function()
-        local RoomExtra = ReplicatedStorage and ReplicatedStorage:FindFirstChild("RoomExtra")
-        if RoomExtra then
-            RoomExtra:FireServer()
-            log("RoomExtra remote fired successfully", "ANNOY")
+        local roomExtraPrompt = workspace.Map and workspace.Map:FindFirstChild("RoomExtra") and 
+                               workspace.Map.RoomExtra:FindFirstChild("Model") and 
+                               workspace.Map.RoomExtra.Model:FindFirstChild("Activate") and 
+                               workspace.Map.RoomExtra.Model.Activate:FindFirstChild("ProximityPrompt")
+        
+        if roomExtraPrompt and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            log("Found RoomExtra proximity prompt, activating it", "ANNOY")
+            
+            -- Teleport to the proximity prompt location
+            local promptParent = roomExtraPrompt.Parent
+            if promptParent and promptParent:FindFirstChild("Position") then
+                player.Character.HumanoidRootPart.CFrame = CFrame.new(promptParent.Position + Vector3.new(2, 0, 0))
+            elseif promptParent.PrimaryPart then
+                player.Character.HumanoidRootPart.CFrame = CFrame.new(promptParent.PrimaryPart.Position + Vector3.new(2, 0, 0))
+            elseif promptParent:IsA("BasePart") then
+                player.Character.HumanoidRootPart.CFrame = CFrame.new(promptParent.Position + Vector3.new(2, 0, 0))
+            end
+            
+            task.wait(0.5)
+            
+            -- Trigger the proximity prompt
+            roomExtraPrompt:InputHoldBegin()
+            task.wait(0.1)
+            roomExtraPrompt:InputHoldEnd()
+            
+            log("RoomExtra proximity prompt activated successfully", "ANNOY")
         else
-            log("RoomExtra remote not found", "WARNING")
+            log("RoomExtra proximity prompt not found at workspace.Map.RoomExtra.Model.Activate.ProximityPrompt", "WARNING")
         end
     end)
     
