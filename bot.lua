@@ -102,7 +102,7 @@ local CONFIG = {
     SCRIPT_URL = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/bot.lua",
     TOOL_CYCLE_DELAY = 0.05,  -- Very fast tool cycling for lag (NO TTS, NO TELEPORTING)
     TELEPORT_DELAY = 0.3,    -- Slower delay between teleports in annoy mode (was 0.05)
-    TTS_INTERVAL = 15         -- Send TTS every 8 seconds in annoy mode
+    TTS_INTERVAL = 8         -- Send TTS every 8 seconds in annoy mode
 }
 
 local player = define(Players.LocalPlayer)
@@ -752,7 +752,7 @@ local function startAnnoyTeleportLoop()
         
         while botState.isAnnoying and botState.isOmnipresent do
             if botState.annoyMode == "player" and botState.targetPlayer then
-                -- Target specific player mode
+                -- Target specific player mode - ONLY TELEPORT TO THIS PLAYER
                 local targetPlayer = nil
                 for _, p in ipairs(Players:GetPlayers()) do
                     if p.Name == botState.targetPlayer and p ~= player then
@@ -764,17 +764,21 @@ local function startAnnoyTeleportLoop()
                 if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
                     if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
                         pcall(function()
-                            -- Teleport to the specific target player
+                            -- ONLY teleport to the specific target player
                             player.Character.HumanoidRootPart.CFrame = CFrame.new(targetPlayer.Character.HumanoidRootPart.Position + Vector3.new(2, 0, 0))
                         end)
                     end
+                    log("Teleporting to target: " .. botState.targetPlayer, "ANNOY")
                 else
                     log("Target player '" .. botState.targetPlayer .. "' not found or has no character", "WARNING")
                 end
                 
                 task.wait(CONFIG.TELEPORT_DELAY)
+                
+                -- DO NOT teleport to anyone else in player mode!
+                
             else
-                -- Whole server mode (original behavior)
+                -- Whole server mode (original behavior) - teleport to everyone
                 local players = Players:GetPlayers()
                 for _, other in ipairs(players) do
                     if not botState.isAnnoying then break end
@@ -782,7 +786,7 @@ local function startAnnoyTeleportLoop()
                     if other ~= player and other.Character and other.Character:FindFirstChild("HumanoidRootPart") then
                         if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
                             pcall(function()
-                                -- Exact same teleportation as example.lua
+                                -- Teleport to all players in server mode
                                 player.Character.HumanoidRootPart.CFrame = CFrame.new(other.Character.HumanoidRootPart.Position + Vector3.new(2, 0, 0))
                             end)
                             task.wait(CONFIG.TELEPORT_DELAY)
@@ -1027,6 +1031,11 @@ local function checkCurrentServer(target)
         botState.lastStatusSync = 0
         botState.lastLoggedTime = 0
         
+        -- Debug logging for targeting
+        if botState.currentTaskType == "annoy" then
+            log("🎯 ANNOY MODE: " .. botState.annoyMode .. " | TARGET: " .. (botState.targetPlayer or "ALL PLAYERS"), "DEBUG")
+        end
+        
         if botState.currentTaskType == "annoy" then
             log("Already in target server! Starting annoy server immediately", "ANNOY")
             startAnnoyServer()
@@ -1058,6 +1067,11 @@ local function executeAttack(target)
     botState.joinTime = tick()
     botState.teleportRetries = 0  -- Reset retry counter for new attack
     botState.teleportStartTime = 0
+    
+    -- Debug logging for targeting
+    if botState.currentTaskType == "annoy" then
+        log("🎯 ANNOY MODE: " .. botState.annoyMode .. " | TARGET: " .. (botState.targetPlayer or "ALL PLAYERS"), "DEBUG")
+    end
     
     local taskName = botState.currentTaskType == "annoy" and "Annoy Server" or "Attack"
     log("Executing " .. taskName .. " on Place ID: " .. target.placeId, string.upper(botState.currentTaskType))
