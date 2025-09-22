@@ -12,6 +12,11 @@ local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+
+-- TTS service
+local TTS = ReplicatedStorage and ReplicatedStorage:FindFirstChild("TTS")
 
 -- Configuration
 local CONFIG = {
@@ -50,7 +55,13 @@ local botState = {
     teleportRetries = 0,
     maxTeleportRetries = 3,
     teleportTimeout = 30,
-    lastStatusSync = 0
+    lastStatusSync = 0,
+    -- Annoy server specific states
+    isAnnoying = false,
+    isOmnipresent = false,
+    chatTimer = 0,
+    currentTaskType = "attack",
+    omnipresenceConnection = nil
 }
 
 -- File handling functions for executor compatibility
@@ -238,7 +249,9 @@ local function syncWithAPI()
         
         -- Return task if one was assigned
         if data.task then
-            log("New target assigned: " .. data.task.placeId .. " | Duration: " .. data.task.duration .. "s | Server Hop: " .. tostring(data.task.serverHop or false))
+            local taskType = data.task.taskType or "attack"
+            local taskName = taskType == "annoy" and "Annoy Server" or "Attack"
+            log("New " .. taskName .. " assigned: " .. data.task.placeId .. " | Duration: " .. data.task.duration .. "s | Server Hop: " .. tostring(data.task.serverHop or false))
             return data.task
         end
         
@@ -488,7 +501,90 @@ local function toolCycleLoop()
     end)
 end
 
--- No teleportation or TTS - just pure tool cycling for lag
+-- TTS function for annoy server
+local function sendTTSMessage(message, voice)
+    if TTS then
+        local success, err = pcall(function()
+            TTS:FireServer(message, voice or "9")
+        end)
+        if not success then
+            log("TTS failed: " .. tostring(err), "ERROR")
+        else
+            log("TTS sent: " .. message, "ANNOY")
+        end
+    else
+        log("TTS remote not found!", "WARNING")
+    end
+end
+
+-- Ultra-fast omnipresence system - INSTANT teleportation using RunService
+local function startOmnipresence()
+    if botState.isOmnipresent then return end
+    botState.isOmnipresent = true
+    
+    log("🌀 Activating omnipresence protocol - INSTANT simultaneous existence", "ANNOY")
+    
+    local currentPlayerIndex = 1
+    
+    -- Use RunService.Heartbeat for maximum speed (60+ FPS)
+    botState.omnipresenceConnection = RunService.Heartbeat:Connect(function()
+        if not botState.isOmnipresent or not botState.isAnnoying then
+            if botState.omnipresenceConnection then
+                botState.omnipresenceConnection:Disconnect()
+                botState.omnipresenceConnection = nil
+            end
+            return
+        end
+        
+        local allPlayers = Players:GetPlayers()
+        local validPlayers = {}
+        
+        -- Get all valid players (excluding self)
+        for _, targetPlayer in pairs(allPlayers) do
+            if targetPlayer ~= player and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                table.insert(validPlayers, targetPlayer)
+            end
+        end
+        
+        if #validPlayers > 0 and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            -- Cycle through players at maximum framerate speed
+            local targetPlayer = validPlayers[currentPlayerIndex]
+            
+            pcall(function()
+                -- INSTANT teleport with no delays
+                local offset = Vector3.new(
+                    math.random(-2, 2),
+                    math.random(0, 2), 
+                    math.random(-2, 2)
+                )
+                local targetPosition = targetPlayer.Character.HumanoidRootPart.Position + offset
+                
+                -- Multiple teleportation methods for maximum effect
+                player.Character.HumanoidRootPart.CFrame = CFrame.new(targetPosition)
+                player.Character.HumanoidRootPart.Position = targetPosition
+                player.Character:SetPrimaryPartCFrame(CFrame.new(targetPosition))
+            end)
+            
+            -- Move to next player instantly
+            currentPlayerIndex = currentPlayerIndex + 1
+            if currentPlayerIndex > #validPlayers then
+                currentPlayerIndex = 1
+            end
+        end
+    end)
+end
+
+local function stopOmnipresence()
+    botState.isOmnipresent = false
+    -- Disconnect the RunService connection
+    if botState.omnipresenceConnection then
+        botState.omnipresenceConnection:Disconnect()
+        botState.omnipresenceConnection = nil
+    end
+    log("🌟 Omnipresence protocol deactivated", "ANNOY")
+end
+
+-- No teleportation or TTS for normal attacks - just pure tool cycling for lag
 
 local function teleportToSafeLocation()
     -- Teleport to safe location where bot won't be seen or reported
@@ -502,6 +598,41 @@ local function teleportToSafeLocation()
             log("Teleported to safe location for lagging", "ATTACK")
         end)
     end
+end
+
+local function startAnnoyServer()
+    if botState.isAnnoying then return end
+    
+    botState.isAnnoying = true
+    botState.status = "annoying"
+    log("Starting annoy server for " .. botState.currentDuration .. " seconds", "ANNOY")
+    
+    -- Start omnipresence system (teleport to everyone fast)
+    startOmnipresence()
+    wait(1)
+    
+    -- Copy avatar and get tools (optional for annoy mode)
+    log("Copying avatar for annoy mode...", "ANNOY")
+    copyAvatarAndGetTools("24k_mxtty1")
+    wait(2)
+    
+    -- Remove targeted items
+    if player.Character then
+        log("Removing targeted items for annoy mode...", "ANNOY")
+        local removedCount = removeTargetedItems(player.Character)
+        log("Removed " .. removedCount .. " items for annoy mode", "ANNOY")
+        wait(2)
+    end
+    
+    -- Send initial TTS message
+    sendTTSMessage("yyyyyyyyyyyyyyyyyyyyyyyyy", "9")
+    botState.chatTimer = tick()
+    
+    log("Annoy server protocol activated - teleporting to everyone and spamming TTS!", "ANNOY")
+    
+    -- Set annoy end time
+    botState.lagEndTime = tick() + botState.currentDuration
+    log("Annoy will end at: " .. botState.lagEndTime .. " (duration: " .. botState.currentDuration .. "s)", "ANNOY")
 end
 
 local function startLagging()
@@ -535,6 +666,62 @@ local function startLagging()
     -- Set lag end time (this should only happen ONCE per attack)
     botState.lagEndTime = tick() + botState.currentDuration
     log("Lag will end at: " .. botState.lagEndTime .. " (duration: " .. botState.currentDuration .. "s)", "ATTACK")
+end
+
+local function stopAnnoyServer()
+    if not botState.isAnnoying then return end
+    
+    botState.isAnnoying = false
+    botState.lagEndTime = 0
+    
+    -- Stop omnipresence
+    stopOmnipresence()
+    
+    log("Annoy server completed", "ANNOY")
+    
+    -- Unequip tools
+    pcall(function()
+        for _, tool in pairs(player.Backpack:GetChildren()) do
+            tool:Destroy()
+        end
+    end)
+    
+    -- Check if server hopping is enabled
+    if botState.serverHopEnabled then
+        log("Server hop enabled - completing server hop", "ANNOY")
+        botState.status = "completed"
+        
+        -- Call server hop completion endpoint
+        local success = completeServerHop()
+        if success then
+            log("Server hop process initiated successfully", "ANNOY")
+            return
+        else
+            log("Server hop failed, falling back to normal completion", "ERROR")
+        end
+    end
+    
+    -- Normal completion (no server hopping)
+    log("Normal annoy completion - going idle", "ANNOY")
+    botState.status = "completed"
+    
+    -- Send completed status to API
+    syncWithAPI()
+    wait(2) -- Give API time to process the completed status
+    
+    -- Set to idle state after API processes completion
+    botState.status = "online"
+    botState.currentTarget = nil
+    botState.currentTaskId = nil
+    botState.joinTime = 0
+    
+    -- Send final online status
+    syncWithAPI()
+    
+    -- Clear status file to prevent restart loops
+    saveBotStatus("online")
+    
+    log("Annoy server marked as completed in API, bot now idle and ready for next task", "ANNOY")
 end
 
 local function stopLagging()
@@ -597,13 +784,20 @@ local function checkCurrentServer(target)
     local currentJobId = game.JobId
     
     if currentPlaceId == target.placeId and currentJobId == target.jobId then
-        log("Already in target server! Starting lag immediately", "ATTACK")
         botState.currentTarget = target
         botState.currentDuration = target.duration or 60
         botState.currentTaskId = target.taskId
         botState.serverHopEnabled = target.serverHop or false
+        botState.currentTaskType = target.taskType or "attack"
         botState.joinTime = tick()
-        startLagging()
+        
+        if botState.currentTaskType == "annoy" then
+            log("Already in target server! Starting annoy server immediately", "ANNOY")
+            startAnnoyServer()
+        else
+            log("Already in target server! Starting lag immediately", "ATTACK")
+            startLagging()
+        end
         return true
     end
     return false
@@ -621,12 +815,14 @@ local function executeAttack(target)
     botState.currentDuration = target.duration or 60
     botState.currentTaskId = target.taskId
     botState.serverHopEnabled = target.serverHop or false
+    botState.currentTaskType = target.taskType or "attack"
     botState.status = "ATTACKING"
     botState.joinTime = tick()
     botState.teleportRetries = 0  -- Reset retry counter for new attack
     botState.teleportStartTime = 0
     
-    log("Executing attack on Place ID: " .. target.placeId, "ATTACK")
+    local taskName = botState.currentTaskType == "annoy" and "Annoy Server" or "Attack"
+    log("Executing " .. taskName .. " on Place ID: " .. target.placeId, string.upper(botState.currentTaskType))
     log("Job ID: " .. string.sub(target.jobId, 1, 12) .. "...")
     log("Duration: " .. botState.currentDuration .. " seconds")
     
@@ -676,6 +872,25 @@ local function executeAttack(target)
 end
 
 local function checkLagDuration()
+    -- Check annoy server duration and TTS messages
+    if botState.isAnnoying and botState.lagEndTime > 0 then
+        local timeRemaining = botState.lagEndTime - tick()
+        
+        if console then
+            console.statusBar.Text = "ANNOYING | TIME LEFT: " .. math.max(0, math.floor(timeRemaining)) .. "s"
+        end
+        
+        -- Send TTS message every 8 seconds
+        if tick() - botState.chatTimer >= 8 then
+            sendTTSMessage("yyyyyyyyyyyyyyyyyyyyyyyyy", "9")
+            botState.chatTimer = tick()
+        end
+        
+        if timeRemaining <= 0 then
+            stopAnnoyServer()
+        end
+    end
+    
     -- Check if we need to stop lagging and go idle
     if botState.isLagging and botState.lagEndTime > 0 then
         local timeRemaining = botState.lagEndTime - tick()
@@ -749,8 +964,8 @@ local function mainLoop()
             else
                 log("No targets available, waiting...")
             end
-        elseif botState.status == "lagging" then
-            -- Only check lag duration when lagging, don't sync with API
+        elseif botState.status == "lagging" or botState.status == "annoying" then
+            -- Only check duration when lagging/annoying, don't sync with API
             checkLagDuration()
         elseif botState.status == "attacking" or botState.status == "teleporting" or botState.status == "TELEPORTING" then
             -- Just sync status, don't look for new tasks
@@ -786,7 +1001,7 @@ local function statusUpdateLoop()
             if botState.status == "ONLINE" then
                 console.statusBar.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
                 console.statusBar.TextColor3 = Color3.fromRGB(255, 255, 255)
-            elseif botState.status == "ATTACKING" or botState.status == "IN_SERVER" then
+            elseif botState.status == "ATTACKING" or botState.status == "IN_SERVER" or botState.status == "annoying" then
                 console.statusBar.BackgroundColor3 = Color3.fromRGB(255, 100, 0)
                 console.statusBar.TextColor3 = Color3.fromRGB(255, 255, 255)
             elseif botState.status == "ERROR" then
