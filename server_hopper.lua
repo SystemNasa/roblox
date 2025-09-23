@@ -24,7 +24,7 @@ local CONFIG = {
     LAG_DURATION = 35, -- 50 seconds per server
     SCRIPT_URL = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/server_hopper.lua", -- Update this to your script URL
     TOOL_CYCLE_DELAY = 0.01, -- Very fast tool cycling
-    CHAT_INTERVAL = 6, -- Chat scary message every 15 seconds
+    CHAT_INTERVAL = 10, -- Chat scary message every 15 seconds
     MAX_RETRIES = 10 -- Max retries for server hop
 }
 
