@@ -21,7 +21,7 @@ local TTS = ReplicatedStorage and ReplicatedStorage:FindFirstChild("TTS")
 
 -- Configuration
 local CONFIG = {
-    LAG_DURATION = 35, -- 50 seconds per server
+    LAG_DURATION = 40, -- 50 seconds per server
     SCRIPT_URL = "https://raw.githubusercontent.com/SystemNasa/roblox/refs/heads/main/server_hopper.lua", -- Update this to your script URL
     TOOL_CYCLE_DELAY = 0.01, -- Very fast tool cycling
     CHAT_INTERVAL = 10, -- Chat scary message every 15 seconds
